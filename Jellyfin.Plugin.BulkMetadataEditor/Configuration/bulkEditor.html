@@ -88,6 +88,7 @@
                         <label>Genre<input type="text" class="bme-f-genre" style="width: 10em"></label>
                         <label>Tag<input type="text" class="bme-f-tag" style="width: 10em"></label>
                         <label>Without tag<input type="text" class="bme-f-notag" style="width: 10em" title="Only items that do not have this tag. Separate several tags with |"></label>
+                        <label>In collection<input type="text" class="bme-f-collection" style="width: 12em" placeholder="Collection name contains…" title="Only items that belong to a collection whose name contains this text"></label>
                         <label>Year<input type="number" class="bme-f-year" style="width: 6em" min="1800" max="2200"></label>
                         <label>Missing
                             <select class="bme-f-missing">
@@ -240,6 +241,8 @@
                 { key: 'OfficialRating', label: 'Rating', def: true },
                 { key: 'Genres', label: 'Genres', def: true, field: 'Genres', sub: true, value: function (i) { return joinList(i.Genres); } },
                 { key: 'Tags', label: 'Tags', def: true, field: 'Tags', sub: true, value: function (i) { return joinList(i.Tags); } },
+                // Not in the /Items response; filled in from the plugin after each page loads (see attachCollections).
+                { key: 'Collections', label: 'Collections', sub: true, value: function (i) { return joinList(i._Collections); } },
                 { key: 'LockData', label: '🔒', title: 'Metadata locked', def: true, field: 'Settings', value: function (i) { return i.LockData ? '🔒' : ''; } },
                 { key: 'OriginalTitle', label: 'Original title', field: 'OriginalTitle' },
                 { key: 'SortName', label: 'Sort title', field: 'SortName' },
@@ -418,7 +421,7 @@
 
                 // ---------- datalists shared by filter and editor inputs ----------
                 var lists = {};
-                ['genres', 'tags', 'studios', 'ratings', 'cultures', 'providers', 'orders', 'people'].forEach(function (name) {
+                ['genres', 'tags', 'studios', 'collections', 'ratings', 'cultures', 'providers', 'orders', 'people'].forEach(function (name) {
                     var id = uid + '-' + name;
                     var dl = el('datalist', { id: id });
                     page.appendChild(dl);
@@ -438,6 +441,7 @@
                 $('.bme-f-genre').setAttribute('list', lists.genres.id);
                 $('.bme-f-tag').setAttribute('list', lists.tags.id);
                 $('.bme-f-notag').setAttribute('list', lists.tags.id);
+                $('.bme-f-collection').setAttribute('list', lists.collections.id);
 
                 // ---------- filters ----------
                 var typesBox = $('.bme-types');
@@ -486,10 +490,14 @@
                     return $('.bme-f-overview').value.trim();
                 }
 
+                function collectionTerm() {
+                    return $('.bme-f-collection').value.trim();
+                }
+
                 // These go through the plugin's search: /Items cannot filter by file name or description or
                 // exclude tags, and with a search term it orders results by relevance and ignores the chosen sort.
                 function usesServerSearch() {
-                    return !!($('.bme-f-search').value.trim() || fileNameTerm() || overviewTerm() || withoutTag());
+                    return !!($('.bme-f-search').value.trim() || fileNameTerm() || overviewTerm() || collectionTerm() || withoutTag());
                 }
 
                 SORT_OPTIONS.forEach(function (o) {
@@ -532,6 +540,7 @@
                 $('.bme-f-search').addEventListener('input', debounce(reload, 400));
                 $('.bme-f-filename').addEventListener('input', debounce(reload, 400));
                 $('.bme-f-overview').addEventListener('input', debounce(reload, 400));
+                $('.bme-f-collection').addEventListener('input', debounce(reload, 400));
                 $('.bme-f-reset').addEventListener('click', function () {
                     page.querySelectorAll('.bme-card input[type=search], .bme-card input[type=text], .bme-card input[type=number]').forEach(function (i) {
                         if (i.closest('.bme-editor')) return;
@@ -652,6 +661,7 @@
                     var q = withRefreshToken(buildQuery());
                     q.FileName = fileNameTerm();
                     q.OverviewContains = overviewTerm();
+                    q.InCollection = collectionTerm();
                     q.ExcludeTags = withoutTag();
                     var key = JSON.stringify(q);
                     if (state.fileMatch && state.fileMatch.key === key) return Promise.resolve(state.fileMatch.items);
@@ -693,11 +703,27 @@
                     return q;
                 }
 
+                // Collection membership is not part of /Items, so when the Collections column is shown, ask the
+                // plugin for the page's items and attach the names. A failure only leaves the column blank.
+                function attachCollections(result) {
+                    var shown = state.columnKeys.indexOf('Collections') !== -1;
+                    if (!shown || !result.items.length) return result;
+                    return postJson('BulkMetadataEditor/Collections', { ItemIds: result.items.map(function (i) { return i.Id; }) })
+                        .then(function (r) {
+                            var byId = (r && r.Collections) || {};
+                            result.items.forEach(function (i) { i._Collections = byId[normId(i.Id)] || []; });
+                            return result;
+                        }, function (err) {
+                            console.error('BulkMetadataEditor: failed to load collections', err);
+                            return result;
+                        });
+                }
+
                 function loadPage(onLoaded) {
                     var seq = ++state.requestSeq;
                     showTableMessage('Loading…');
 
-                    (usesServerSearch() ? loadServerSearchPage() : loadItemsPage()).then(function (result) {
+                    (usesServerSearch() ? loadServerSearchPage() : loadItemsPage()).then(attachCollections).then(function (result) {
                         if (seq !== state.requestSeq) return;
                         // An update can move items out of the filters and leave this page past the end.
                         if (!result.items.length && result.total > 0 && state.startIndex >= result.total) {
@@ -1360,6 +1386,9 @@
                     }, function () { /* suggestions are optional */ });
                     getJson('Studios', { userId: userId, Limit: 2000, EnableImages: false, EnableTotalRecordCount: false }).then(function (r) {
                         fillList('studios', (r.Items || []).map(function (s) { return s.Name; }));
+                    }, function () { /* optional */ });
+                    getJson('Items', { userId: userId, IncludeItemTypes: 'BoxSet', Recursive: true, SortBy: 'SortName', EnableImages: false, EnableUserData: false, EnableTotalRecordCount: false }).then(function (r) {
+                        fillList('collections', (r.Items || []).map(function (s) { return s.Name; }));
                     }, function () { /* optional */ });
                 }
 

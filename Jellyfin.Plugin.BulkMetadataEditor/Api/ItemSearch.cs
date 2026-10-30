@@ -22,6 +22,9 @@ public class ItemSearchQuery
     /// <summary>Gets or sets text the item's overview (description) must contain.</summary>
     public string? OverviewContains { get; set; }
 
+    /// <summary>Gets or sets text the name of a collection the item belongs to must contain.</summary>
+    public string? InCollection { get; set; }
+
     /// <summary>Gets or sets pipe-delimited tags the item must not have.</summary>
     public string? ExcludeTags { get; set; }
 
@@ -83,8 +86,11 @@ public class ItemSearchResult
 
 /// <summary>
 /// Runs the item list's filters together with what <c>/Items</c> cannot do: match a file name or
-/// description, exclude tags, and search titles without losing the requested sort.
+/// description, exclude tags, find items by the collection they are in, and search titles without
+/// losing the requested sort.
 /// <list type="bullet">
+/// <item>The collection filter resolves member IDs from <see cref="CollectionIndex"/> and runs in the database as
+/// <see cref="InternalItemsQuery.ItemIds"/>.</item>
 /// <item>Excluded tags run in the database through <see cref="InternalItemsQuery.ExcludeTags"/>, which matches the item's own tags.</item>
 /// <item>The title term runs as <see cref="InternalItemsQuery.NameContains"/>. A <see cref="InternalItemsQuery.SearchTerm"/>
 /// would make Jellyfin order by search relevance and ignore the sort.</item>
@@ -99,16 +105,19 @@ public class ItemSearch
 
     private readonly ILibraryManager _libraryManager;
     private readonly IUserManager _userManager;
+    private readonly CollectionIndex _collectionIndex;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ItemSearch"/> class.
     /// </summary>
     /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
-    public ItemSearch(ILibraryManager libraryManager, IUserManager userManager)
+    /// <param name="collectionIndex">The collection membership index.</param>
+    public ItemSearch(ILibraryManager libraryManager, IUserManager userManager, CollectionIndex collectionIndex)
     {
         _libraryManager = libraryManager;
         _userManager = userManager;
+        _collectionIndex = collectionIndex;
     }
 
     /// <summary>
@@ -152,6 +161,24 @@ public class ItemSearch
 
         var order = Enum.TryParse<SortOrder>(request.SortOrder, true, out var parsedOrder) ? parsedOrder : SortOrder.Ascending;
         query.OrderBy = ParseEnums<ItemSortBy>(request.SortBy).Select(s => (s, order)).ToArray();
+
+        if (!string.IsNullOrWhiteSpace(request.InCollection))
+        {
+            var memberIds = _collectionIndex.GetItemIdsInCollections(request.InCollection);
+            if (memberIds.Length == 0)
+            {
+                return new ItemSearchResult();
+            }
+
+            query.ItemIds = memberIds;
+
+            // With ItemIds set, Folder.GetItems queries the library directly and skips the folder's own
+            // scoping, so pass the library as ParentId the way the /Items controller does.
+            if (request.ParentId is { } libraryId && libraryId != Guid.Empty)
+            {
+                query.ParentId = libraryId;
+            }
+        }
 
         IEnumerable<BaseItem> matches = folder.GetItems(query).Items;
         var term = request.FileName?.Trim();

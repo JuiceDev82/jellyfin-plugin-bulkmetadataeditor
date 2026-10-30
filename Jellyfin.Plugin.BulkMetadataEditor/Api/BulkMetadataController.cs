@@ -24,7 +24,7 @@ public class BulkMetadataController : ControllerBase
 {
     private readonly BulkMetadataUpdater _updater;
     private readonly BulkMetadataAuditLog _auditLog;
-    private readonly FileNameSearch _fileNameSearch;
+    private readonly ItemSearch _itemSearch;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BulkMetadataController"/> class.
@@ -44,29 +44,31 @@ public class BulkMetadataController : ControllerBase
         var plugin = Plugin.Instance ?? throw new InvalidOperationException("Bulk Metadata Editor plugin is not initialized.");
         _updater = new BulkMetadataUpdater(libraryManager, providerManager, fileSystem, logger);
         _auditLog = new BulkMetadataAuditLog(plugin.AuditLogPath, logger);
-        _fileNameSearch = new FileNameSearch(libraryManager, userManager);
+        _itemSearch = new ItemSearch(libraryManager, userManager);
     }
 
     /// <summary>
-    /// Finds every item whose file or folder name contains a term, applying the same filters as the item list.
+    /// Finds every item matching the item list's filters plus a file name term and/or excluded tags,
+    /// which <c>/Items</c> cannot filter on.
     /// </summary>
-    /// <param name="query">The filters and the file name term.</param>
+    /// <param name="query">The filters.</param>
     /// <response code="200">Matching item IDs and types, in list order.</response>
-    /// <response code="400">No file name term was given.</response>
+    /// <response code="400">Neither a file name term nor excluded tags were given.</response>
     /// <response code="404">The parent folder was not found.</response>
     /// <returns>The matching items.</returns>
     [HttpGet("Search")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult<FileNameSearchResult> Search([FromQuery] FileNameSearchQuery query)
+    public ActionResult<ItemSearchResult> Search([FromQuery] ItemSearchQuery query)
     {
-        if (string.IsNullOrWhiteSpace(query.FileName))
+        // Without these, /Items answers the same query paged in the database, which is cheaper.
+        if (string.IsNullOrWhiteSpace(query.FileName) && string.IsNullOrWhiteSpace(query.ExcludeTags))
         {
-            return BadRequest("A file name term is required.");
+            return BadRequest("A file name term or excluded tags are required.");
         }
 
-        var result = _fileNameSearch.Find(query);
+        var result = _itemSearch.Find(query);
         return result is null ? NotFound() : result;
     }
 

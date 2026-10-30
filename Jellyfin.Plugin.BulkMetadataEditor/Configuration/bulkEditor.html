@@ -86,6 +86,7 @@
                         <label>Library<select class="bme-f-library"><option value="">All libraries</option></select></label>
                         <label>Genre<input type="text" class="bme-f-genre" style="width: 10em"></label>
                         <label>Tag<input type="text" class="bme-f-tag" style="width: 10em"></label>
+                        <label>Without tag<input type="text" class="bme-f-notag" style="width: 10em" title="Only items that do not have this tag. Separate several tags with |"></label>
                         <label>Year<input type="number" class="bme-f-year" style="width: 6em" min="1800" max="2200"></label>
                         <label>Missing
                             <select class="bme-f-missing">
@@ -217,7 +218,7 @@
                 'alternate', 'regional', 'alternateDvd', 'PremiereDate', 'SortName', 'Default'];
             var UPDATE_BATCH_SIZE = 20;
             var COLUMN_STORAGE_KEY = 'bulkMetadataEditor.columns';
-            // Item IDs sent to /Items per request in file name mode; keeps the URL well under server limits.
+            // Item IDs sent to /Items per request when the plugin search runs; keeps the URL well under server limits.
             var IDS_PER_REQUEST = 100;
 
             function joinList(v) { return (v || []).join(', '); }
@@ -405,7 +406,7 @@
                     total: 0,
                     items: [],
                     selected: new Map(), // normalized id -> Type
-                    fileMatch: null, // { key, items } cached file name search result
+                    fileMatch: null, // { key, items } cached plugin search result
                     refreshToken: 0,
                     columnKeys: loadColumnKeys(),
                     requestSeq: 0,
@@ -435,6 +436,7 @@
                 fillList('orders', DISPLAY_ORDERS);
                 $('.bme-f-genre').setAttribute('list', lists.genres.id);
                 $('.bme-f-tag').setAttribute('list', lists.tags.id);
+                $('.bme-f-notag').setAttribute('list', lists.tags.id);
 
                 // ---------- filters ----------
                 var typesBox = $('.bme-types');
@@ -475,6 +477,15 @@
                     return $('.bme-f-filename').value.trim();
                 }
 
+                function withoutTag() {
+                    return $('.bme-f-notag').value.trim();
+                }
+
+                // File name and "without tag" are filters /Items lacks, so they go through the plugin's search.
+                function usesServerSearch() {
+                    return !!(fileNameTerm() || withoutTag());
+                }
+
                 SORT_OPTIONS.forEach(function (o) {
                     $('.bme-f-sort').appendChild(el('option', { value: o[0], text: o[1] }));
                 });
@@ -510,7 +521,7 @@
                     reload();
                 });
 
-                ['.bme-f-library', '.bme-f-genre', '.bme-f-tag', '.bme-f-year', '.bme-f-missing', '.bme-f-locked', '.bme-f-sort', '.bme-f-order']
+                ['.bme-f-library', '.bme-f-genre', '.bme-f-tag', '.bme-f-notag', '.bme-f-year', '.bme-f-missing', '.bme-f-locked', '.bme-f-sort', '.bme-f-order']
                     .forEach(function (sel) { $(sel).addEventListener('change', reload); });
                 $('.bme-f-search').addEventListener('input', debounce(reload, 400));
                 $('.bme-f-filename').addEventListener('input', debounce(reload, 400));
@@ -628,11 +639,12 @@
                     });
                 }
 
-                // Every item whose file name matches, in list order. /Items cannot filter on file names,
+                // Every matching item, in list order. /Items cannot filter on file names or excluded tags,
                 // so the plugin finds them and the result is cached until the filters change.
-                function fileNameMatches() {
+                function serverSearchMatches() {
                     var q = withRefreshToken(buildQuery());
                     q.FileName = fileNameTerm();
+                    q.ExcludeTags = withoutTag();
                     var key = JSON.stringify(q);
                     if (state.fileMatch && state.fileMatch.key === key) return Promise.resolve(state.fileMatch.items);
                     return getJson('BulkMetadataEditor/Search', q).then(function (r) {
@@ -641,8 +653,8 @@
                     });
                 }
 
-                function loadFileNamePage() {
-                    return fileNameMatches().then(function (all) {
+                function loadServerSearchPage() {
+                    return serverSearchMatches().then(function (all) {
                         var slice = all.slice(state.startIndex, state.startIndex + pageSize());
                         var requests = [];
                         for (var i = 0; i < slice.length; i += IDS_PER_REQUEST) {
@@ -677,7 +689,7 @@
                     var seq = ++state.requestSeq;
                     showTableMessage('Loading…');
 
-                    (fileNameTerm() ? loadFileNamePage() : loadItemsPage()).then(function (result) {
+                    (usesServerSearch() ? loadServerSearchPage() : loadItemsPage()).then(function (result) {
                         if (seq !== state.requestSeq) return;
                         // An update can move items out of the filters and leave this page past the end.
                         if (!result.items.length && result.total > 0 && state.startIndex >= result.total) {
@@ -772,8 +784,8 @@
                     var btn = $('.bme-sel-all');
                     btn.disabled = true;
                     var matching;
-                    if (fileNameTerm()) {
-                        matching = fileNameMatches();
+                    if (usesServerSearch()) {
+                        matching = serverSearchMatches();
                     } else {
                         var q = buildQuery();
                         q.EnableTotalRecordCount = false;

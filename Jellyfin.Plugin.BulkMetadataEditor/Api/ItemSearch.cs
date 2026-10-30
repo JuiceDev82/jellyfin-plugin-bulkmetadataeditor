@@ -11,11 +11,15 @@ using MediaBrowser.Controller.Library;
 namespace Jellyfin.Plugin.BulkMetadataEditor.Api;
 
 /// <summary>
-/// The filters of the item list, as sent to the <c>/Items</c> API, plus a file name term.
+/// The filters of the item list, as sent to the <c>/Items</c> API, plus the filters <c>/Items</c> lacks.
 /// </summary>
-public class FileNameSearchQuery
+public class ItemSearchQuery
 {
-    public string FileName { get; set; } = string.Empty;
+    /// <summary>Gets or sets text the item's file or folder name must contain.</summary>
+    public string? FileName { get; set; }
+
+    /// <summary>Gets or sets pipe-delimited tags the item must not have.</summary>
+    public string? ExcludeTags { get; set; }
 
     public Guid? UserId { get; set; }
 
@@ -53,9 +57,9 @@ public class FileNameSearchQuery
 }
 
 /// <summary>
-/// An item matched by a file name search.
+/// An item matched by a search.
 /// </summary>
-public class FileNameSearchItem
+public class ItemSearchItem
 {
     public Guid Id { get; set; }
 
@@ -63,21 +67,22 @@ public class FileNameSearchItem
 }
 
 /// <summary>
-/// Every item matched by a file name search, in list order.
+/// Every item matched by a search, in list order.
 /// </summary>
-public class FileNameSearchResult
+public class ItemSearchResult
 {
     public int TotalRecordCount { get; set; }
 
-    public List<FileNameSearchItem> Items { get; set; } = [];
+    public List<ItemSearchItem> Items { get; set; } = [];
 }
 
 /// <summary>
-/// Finds items whose file (or folder) name contains a term. Neither <c>/Items</c> nor
-/// <see cref="InternalItemsQuery"/> can filter on part of a path, so the other filters run in the
-/// database and the file name is matched in memory over what they return.
+/// Runs the item list's filters together with the two that <c>/Items</c> does not offer: a file name
+/// term and excluded tags. Excluded tags run in the database through <see cref="InternalItemsQuery.ExcludeTags"/>,
+/// which matches the item's own tags. Nothing can filter on part of a path, so the file name is
+/// matched in memory over what the database returns.
 /// </summary>
-public class FileNameSearch
+public class ItemSearch
 {
     private static readonly char[] PipeSeparator = ['|'];
     private static readonly char[] CommaSeparator = [','];
@@ -86,11 +91,11 @@ public class FileNameSearch
     private readonly IUserManager _userManager;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="FileNameSearch"/> class.
+    /// Initializes a new instance of the <see cref="ItemSearch"/> class.
     /// </summary>
     /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
-    public FileNameSearch(ILibraryManager libraryManager, IUserManager userManager)
+    public ItemSearch(ILibraryManager libraryManager, IUserManager userManager)
     {
         _libraryManager = libraryManager;
         _userManager = userManager;
@@ -99,9 +104,9 @@ public class FileNameSearch
     /// <summary>
     /// Runs the search.
     /// </summary>
-    /// <param name="request">The filters and file name term.</param>
+    /// <param name="request">The filters.</param>
     /// <returns>All matching items, or null if the parent folder does not exist.</returns>
-    public FileNameSearchResult? Find(FileNameSearchQuery request)
+    public ItemSearchResult? Find(ItemSearchQuery request)
     {
         var user = request.UserId is { } userId && userId != Guid.Empty ? _userManager.GetUserById(userId) : null;
 
@@ -121,6 +126,7 @@ public class FileNameSearch
             SearchTerm = string.IsNullOrWhiteSpace(request.SearchTerm) ? null : request.SearchTerm.Trim(),
             Genres = SplitList(request.Genres, PipeSeparator),
             Tags = SplitList(request.Tags, PipeSeparator),
+            ExcludeTags = SplitList(request.ExcludeTags, PipeSeparator),
             Years = SplitList(request.Years, CommaSeparator)
                 .Select(y => int.TryParse(y, NumberStyles.Integer, CultureInfo.InvariantCulture, out var year) ? year : (int?)null)
                 .OfType<int>()
@@ -136,13 +142,18 @@ public class FileNameSearch
         var order = Enum.TryParse<SortOrder>(request.SortOrder, true, out var parsedOrder) ? parsedOrder : SortOrder.Ascending;
         query.OrderBy = ParseEnums<ItemSortBy>(request.SortBy).Select(s => (s, order)).ToArray();
 
-        var term = request.FileName.Trim();
-        var items = folder.GetItems(query).Items
-            .Where(item => FileNameOf(item)?.Contains(term, StringComparison.OrdinalIgnoreCase) == true)
-            .Select(item => new FileNameSearchItem { Id = item.Id, Type = item.GetBaseItemKind().ToString() })
+        IEnumerable<BaseItem> matches = folder.GetItems(query).Items;
+        var term = request.FileName?.Trim();
+        if (!string.IsNullOrEmpty(term))
+        {
+            matches = matches.Where(item => FileNameOf(item)?.Contains(term, StringComparison.OrdinalIgnoreCase) == true);
+        }
+
+        var items = matches
+            .Select(item => new ItemSearchItem { Id = item.Id, Type = item.GetBaseItemKind().ToString() })
             .ToList();
 
-        return new FileNameSearchResult { TotalRecordCount = items.Count, Items = items };
+        return new ItemSearchResult { TotalRecordCount = items.Count, Items = items };
     }
 
     private static string? FileNameOf(BaseItem item)

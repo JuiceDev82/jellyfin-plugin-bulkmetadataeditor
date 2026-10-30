@@ -481,9 +481,10 @@
                     return $('.bme-f-notag').value.trim();
                 }
 
-                // File name and "without tag" are filters /Items lacks, so they go through the plugin's search.
+                // These go through the plugin's search: /Items cannot filter by file name or exclude tags, and
+                // with a search term it orders results by relevance and ignores the chosen sort.
                 function usesServerSearch() {
-                    return !!(fileNameTerm() || withoutTag());
+                    return !!($('.bme-f-search').value.trim() || fileNameTerm() || withoutTag());
                 }
 
                 SORT_OPTIONS.forEach(function (o) {

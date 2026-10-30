@@ -48,12 +48,12 @@ public class BulkMetadataController : ControllerBase
     }
 
     /// <summary>
-    /// Finds every item matching the item list's filters plus a file name term and/or excluded tags,
-    /// which <c>/Items</c> cannot filter on.
+    /// Finds every item matching the item list's filters, for the cases <c>/Items</c> cannot serve:
+    /// a file name term, excluded tags, or a title search that must keep the requested sort.
     /// </summary>
     /// <param name="query">The filters.</param>
     /// <response code="200">Matching item IDs and types, in list order.</response>
-    /// <response code="400">Neither a file name term nor excluded tags were given.</response>
+    /// <response code="400">None of a title term, file name term or excluded tags were given.</response>
     /// <response code="404">The parent folder was not found.</response>
     /// <returns>The matching items.</returns>
     [HttpGet("Search")]
@@ -63,9 +63,11 @@ public class BulkMetadataController : ControllerBase
     public ActionResult<ItemSearchResult> Search([FromQuery] ItemSearchQuery query)
     {
         // Without these, /Items answers the same query paged in the database, which is cheaper.
-        if (string.IsNullOrWhiteSpace(query.FileName) && string.IsNullOrWhiteSpace(query.ExcludeTags))
+        if (string.IsNullOrWhiteSpace(query.SearchTerm)
+            && string.IsNullOrWhiteSpace(query.FileName)
+            && string.IsNullOrWhiteSpace(query.ExcludeTags))
         {
-            return BadRequest("A file name term or excluded tags are required.");
+            return BadRequest("A title term, file name term or excluded tags are required.");
         }
 
         var result = _itemSearch.Find(query);

@@ -124,7 +124,7 @@ The web UI uses `ApiClient`, which sends the standard `Authorization: MediaBrows
 | `POST` | `/BulkMetadataEditor/Update` | Apply metadata changes to the given item IDs |
 | `GET` | `/BulkMetadataEditor/AuditLog` | Read the audit log, newest first |
 | `POST` | `/BulkMetadataEditor/AuditLog/Clear` | Clear the audit log |
-| `GET` | `/BulkMetadataEditor/Search` | List the IDs and types of every item matching the `/Items` filters plus `fileName` (file or folder name contains) and/or `excludeTags` (pipe-delimited) |
+| `GET` | `/BulkMetadataEditor/Search` | List the IDs and types of every item matching the `/Items` filters, in the requested sort. Supports `searchTerm` (title contains), `fileName` (file or folder name contains) and `excludeTags` (pipe-delimited). At least one of the three is required. |
 
 ```json
 {
@@ -153,11 +153,16 @@ single audit log entry. Omitting it records each request as its own entry.
   location keeps the log when the plugin is upgraded.
 - Each entry keeps per-item results for its first 500 items. Its counts always cover every
   item.
-- `/Items` cannot filter by file name or exclude tags, so when either filter is used the
-  page switches to the plugin's search. Excluded tags are applied in the database. Jellyfin
-  cannot filter on part of a path, so file names are matched in memory on the server. The
-  page caches the matching IDs until a filter changes and loads each page's details from
-  `/Items`.
+- `/Items` cannot filter by file name or exclude tags. With a search term it also orders
+  results by relevance and ignores the chosen sort. So when the title search, file name or
+  without tag filter is used, the page switches to the plugin's search.
+  - The title search becomes a "name contains" filter, which keeps the sort.
+  - Excluded tags are applied in the database.
+  - File names are matched in memory on the server, because Jellyfin cannot filter on part
+    of a path.
+
+  The page caches the matching IDs until a filter changes and loads each page's details
+  from `/Items`.
 
 ## License
 

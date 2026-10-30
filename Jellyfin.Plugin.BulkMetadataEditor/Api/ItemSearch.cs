@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Enums;
+using Jellyfin.Extensions;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 
@@ -27,6 +28,7 @@ public class ItemSearchQuery
 
     public Guid? ParentId { get; set; }
 
+    /// <summary>Gets or sets text the title (or original title) must contain.</summary>
     public string? SearchTerm { get; set; }
 
     /// <summary>Gets or sets pipe-delimited genre names.</summary>
@@ -77,10 +79,14 @@ public class ItemSearchResult
 }
 
 /// <summary>
-/// Runs the item list's filters together with the two that <c>/Items</c> does not offer: a file name
-/// term and excluded tags. Excluded tags run in the database through <see cref="InternalItemsQuery.ExcludeTags"/>,
-/// which matches the item's own tags. Nothing can filter on part of a path, so the file name is
-/// matched in memory over what the database returns.
+/// Runs the item list's filters together with what <c>/Items</c> cannot do: match a file name, exclude
+/// tags, and search titles without losing the requested sort.
+/// <list type="bullet">
+/// <item>Excluded tags run in the database through <see cref="InternalItemsQuery.ExcludeTags"/>, which matches the item's own tags.</item>
+/// <item>The title term runs as <see cref="InternalItemsQuery.NameContains"/>. A <see cref="InternalItemsQuery.SearchTerm"/>
+/// would make Jellyfin order by search relevance and ignore the sort.</item>
+/// <item>Nothing can filter on part of a path, so the file name is matched in memory over what the database returns.</item>
+/// </list>
 /// </summary>
 public class ItemSearch
 {
@@ -123,7 +129,8 @@ public class ItemSearch
             Recursive = true,
             IsVirtualItem = false,
             IncludeItemTypes = ParseEnums<BaseItemKind>(request.IncludeItemTypes),
-            SearchTerm = string.IsNullOrWhiteSpace(request.SearchTerm) ? null : request.SearchTerm.Trim(),
+            // NameContains is compared against CleanName, so clean the term the same way.
+            NameContains = string.IsNullOrWhiteSpace(request.SearchTerm) ? null : request.SearchTerm.Trim().GetCleanValue(),
             Genres = SplitList(request.Genres, PipeSeparator),
             Tags = SplitList(request.Tags, PipeSeparator),
             ExcludeTags = SplitList(request.ExcludeTags, PipeSeparator),

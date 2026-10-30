@@ -9,6 +9,14 @@
     "imageUrl": "",
     "versions": [
       {
+        "version": "1.0.1.0",
+        "changelog": "Sorting and description search Column sorting now works while searching by title: title searches use a \"name contains\" filter so the chosen sort is kept instead of Jellyfin's relevance order. New Description filter finds items whose overview contains the given text, and combines with every other filter.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/JuiceDev82/jellyfin-plugin-bulkmetadataeditor/releases/download/v1.0.1/Jellyfin.Plugin.BulkMetadataEditor-1.0.1.0.zip",
+        "checksum": "7217e3db06e9127e738f7fb4b6f80ef8",
+        "timestamp": "2026-10-30T20:27:48Z"
+      },
+      {
         "version": "1.0.0.0",
         "changelog": "Initial release Bulk metadata editing for Jellyfin 12. Filter movies, shows, seasons, episodes, collections, music and more by type, library, title, file name, genre, tag, without tag, year, missing data and lock state; pick and sort grid columns; select any number of items and edit every field from the Edit Metadata dialog, with add/remove/replace for list fields and optional field locking. Every bulk edit is recorded in an audit log.",
         "targetAbi": "12.0.0.0",

@@ -7,6 +7,15 @@
     "owner": "JuiceDev82",
     "category": "General",
     "imageUrl": "",
-    "versions": []
+    "versions": [
+      {
+        "version": "1.0.0.0",
+        "changelog": "Initial release Bulk metadata editing for Jellyfin 12. Filter movies, shows, seasons, episodes, collections, music and more by type, library, title, file name, genre, tag, without tag, year, missing data and lock state; pick and sort grid columns; select any number of items and edit every field from the Edit Metadata dialog, with add/remove/replace for list fields and optional field locking. Every bulk edit is recorded in an audit log.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/JuiceDev82/jellyfin-plugin-bulkmetadataeditor/releases/download/v1.0.0/Jellyfin.Plugin.BulkMetadataEditor-1.0.0.0.zip",
+        "checksum": "0e1bc4d2d9aed919a064ddaba06e3128",
+        "timestamp": "2026-10-30T19:38:47Z"
+      }
+    ]
   }
 ]

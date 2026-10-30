@@ -19,6 +19,9 @@ public class ItemSearchQuery
     /// <summary>Gets or sets text the item's file or folder name must contain.</summary>
     public string? FileName { get; set; }
 
+    /// <summary>Gets or sets text the item's overview (description) must contain.</summary>
+    public string? OverviewContains { get; set; }
+
     /// <summary>Gets or sets pipe-delimited tags the item must not have.</summary>
     public string? ExcludeTags { get; set; }
 
@@ -79,13 +82,14 @@ public class ItemSearchResult
 }
 
 /// <summary>
-/// Runs the item list's filters together with what <c>/Items</c> cannot do: match a file name, exclude
-/// tags, and search titles without losing the requested sort.
+/// Runs the item list's filters together with what <c>/Items</c> cannot do: match a file name or
+/// description, exclude tags, and search titles without losing the requested sort.
 /// <list type="bullet">
 /// <item>Excluded tags run in the database through <see cref="InternalItemsQuery.ExcludeTags"/>, which matches the item's own tags.</item>
 /// <item>The title term runs as <see cref="InternalItemsQuery.NameContains"/>. A <see cref="InternalItemsQuery.SearchTerm"/>
 /// would make Jellyfin order by search relevance and ignore the sort.</item>
-/// <item>Nothing can filter on part of a path, so the file name is matched in memory over what the database returns.</item>
+/// <item>Nothing can filter on part of a path or overview, so the file name and description are matched in
+/// memory over what the database returns.</item>
 /// </list>
 /// </summary>
 public class ItemSearch
@@ -154,6 +158,12 @@ public class ItemSearch
         if (!string.IsNullOrEmpty(term))
         {
             matches = matches.Where(item => FileNameOf(item)?.Contains(term, StringComparison.OrdinalIgnoreCase) == true);
+        }
+
+        var overviewTerm = request.OverviewContains?.Trim();
+        if (!string.IsNullOrEmpty(overviewTerm))
+        {
+            matches = matches.Where(item => item.Overview?.Contains(overviewTerm, StringComparison.OrdinalIgnoreCase) == true);
         }
 
         var items = matches

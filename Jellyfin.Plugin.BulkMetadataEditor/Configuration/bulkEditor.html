@@ -83,6 +83,7 @@
                     <div class="bme-row">
                         <label>Search<input type="search" class="bme-f-search" placeholder="Title contains…" style="width: 16em"></label>
                         <label>File name<input type="search" class="bme-f-filename" placeholder="File or folder name contains…" style="width: 16em"></label>
+                        <label>Description<input type="search" class="bme-f-overview" placeholder="Description contains…" style="width: 16em"></label>
                         <label>Library<select class="bme-f-library"><option value="">All libraries</option></select></label>
                         <label>Genre<input type="text" class="bme-f-genre" style="width: 10em"></label>
                         <label>Tag<input type="text" class="bme-f-tag" style="width: 10em"></label>
@@ -481,10 +482,14 @@
                     return $('.bme-f-notag').value.trim();
                 }
 
-                // These go through the plugin's search: /Items cannot filter by file name or exclude tags, and
-                // with a search term it orders results by relevance and ignores the chosen sort.
+                function overviewTerm() {
+                    return $('.bme-f-overview').value.trim();
+                }
+
+                // These go through the plugin's search: /Items cannot filter by file name or description or
+                // exclude tags, and with a search term it orders results by relevance and ignores the chosen sort.
                 function usesServerSearch() {
-                    return !!($('.bme-f-search').value.trim() || fileNameTerm() || withoutTag());
+                    return !!($('.bme-f-search').value.trim() || fileNameTerm() || overviewTerm() || withoutTag());
                 }
 
                 SORT_OPTIONS.forEach(function (o) {
@@ -526,6 +531,7 @@
                     .forEach(function (sel) { $(sel).addEventListener('change', reload); });
                 $('.bme-f-search').addEventListener('input', debounce(reload, 400));
                 $('.bme-f-filename').addEventListener('input', debounce(reload, 400));
+                $('.bme-f-overview').addEventListener('input', debounce(reload, 400));
                 $('.bme-f-reset').addEventListener('click', function () {
                     page.querySelectorAll('.bme-card input[type=search], .bme-card input[type=text], .bme-card input[type=number]').forEach(function (i) {
                         if (i.closest('.bme-editor')) return;
@@ -645,6 +651,7 @@
                 function serverSearchMatches() {
                     var q = withRefreshToken(buildQuery());
                     q.FileName = fileNameTerm();
+                    q.OverviewContains = overviewTerm();
                     q.ExcludeTags = withoutTag();
                     var key = JSON.stringify(q);
                     if (state.fileMatch && state.fileMatch.key === key) return Promise.resolve(state.fileMatch.items);

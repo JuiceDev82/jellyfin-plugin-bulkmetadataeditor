@@ -10,11 +10,13 @@ instead of opening the Edit Metadata dialog for each one.
 
 - **Filter** the library by type: movies, shows, seasons, episodes, collections, albums,
   artists, songs, music videos, videos, trailers, books, audiobooks, playlists and photos.
-  You can also filter by library, title search, file name, genre, tag, without tag and
-  year. Other filters find items missing data (overview, parental rating, IMDb/TMDb/TVDb ID)
+  You can also filter by library, title search, file name, description, genre, tag,
+  without tag and year. Other filters find items missing data (overview, parental rating, IMDb/TMDb/TVDb ID)
   or limit the list by lock state. Results are sortable and paged.
 - **File name search** matches part of an item's file name, or its folder name for shows,
   seasons and albums. It combines with every other filter.
+- **Description search** matches part of an item's overview, ignoring case. It combines
+  with every other filter.
 - **Without tag** lists only items that do not have a tag, which makes it easy to find what
   still needs tagging. Separate several tags with `|`. It checks the item's own tags, so an
   episode is not excluded just because its show has the tag.
@@ -124,7 +126,7 @@ The web UI uses `ApiClient`, which sends the standard `Authorization: MediaBrows
 | `POST` | `/BulkMetadataEditor/Update` | Apply metadata changes to the given item IDs |
 | `GET` | `/BulkMetadataEditor/AuditLog` | Read the audit log, newest first |
 | `POST` | `/BulkMetadataEditor/AuditLog/Clear` | Clear the audit log |
-| `GET` | `/BulkMetadataEditor/Search` | List the IDs and types of every item matching the `/Items` filters, in the requested sort. Supports `searchTerm` (title contains), `fileName` (file or folder name contains) and `excludeTags` (pipe-delimited). At least one of the three is required. |
+| `GET` | `/BulkMetadataEditor/Search` | List the IDs and types of every item matching the `/Items` filters, in the requested sort. Supports `searchTerm` (title contains), `fileName` (file or folder name contains), `overviewContains` (description contains) and `excludeTags` (pipe-delimited). At least one of these is required. |
 
 ```json
 {
@@ -153,13 +155,14 @@ single audit log entry. Omitting it records each request as its own entry.
   location keeps the log when the plugin is upgraded.
 - Each entry keeps per-item results for its first 500 items. Its counts always cover every
   item.
-- `/Items` cannot filter by file name or exclude tags. With a search term it also orders
-  results by relevance and ignores the chosen sort. So when the title search, file name or
-  without tag filter is used, the page switches to the plugin's search.
+- `/Items` cannot filter by file name or description, or exclude tags. With a search term
+  it also orders results by relevance and ignores the chosen sort. So when the title
+  search, file name, description or without tag filter is used, the page switches to the
+  plugin's search.
   - The title search becomes a "name contains" filter, which keeps the sort.
   - Excluded tags are applied in the database.
-  - File names are matched in memory on the server, because Jellyfin cannot filter on part
-    of a path.
+  - File names and descriptions are matched in memory on the server, because Jellyfin
+    cannot filter on part of a path or overview.
 
   The page caches the matching IDs until a filter changes and loads each page's details
   from `/Items`.

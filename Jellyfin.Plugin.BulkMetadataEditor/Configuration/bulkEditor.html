@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Bulk Metadata Editor</title>
+</head>
+<body>
+<div id="bulkMetadataEditorPage" data-role="page" class="page type-interior pluginConfigurationPage bulkMetadataEditorPage" data-require="emby-input,emby-button,emby-select,emby-checkbox">
+    <div data-role="content">
+        <div class="content-primary">
+            <style>
+                .bme { --bme-border: rgba(128, 128, 128, 0.35); --bme-muted: rgba(128, 128, 128, 0.12); --bme-accent: #00a4dc; }
+                .bme h2 { margin: 1.2em 0 0.5em; }
+                .bme .bme-card { border: 1px solid var(--bme-border); border-radius: 6px; padding: 0.8em 1em; margin-bottom: 1em; }
+                .bme .bme-row { display: flex; flex-wrap: wrap; gap: 0.6em 1em; align-items: flex-end; }
+                .bme .bme-row > label { display: flex; flex-direction: column; gap: 0.25em; font-size: 0.85em; opacity: 0.95; }
+                .bme input[type=text], .bme input[type=number], .bme input[type=date], .bme input[type=search], .bme select, .bme textarea {
+                    background: var(--bme-muted); color: inherit; border: 1px solid var(--bme-border); border-radius: 4px;
+                    padding: 0.4em 0.5em; font: inherit; font-size: 0.95em; min-width: 0; box-sizing: border-box;
+                }
+                .bme select option { color: #000; background: #fff; }
+                .bme textarea { width: 100%; min-height: 6em; resize: vertical; }
+                .bme .bme-types { display: flex; flex-wrap: wrap; gap: 0.3em 0.9em; margin-top: 0.6em; }
+                .bme .bme-types label, .bme .bme-checks label { display: inline-flex; align-items: center; gap: 0.3em; font-size: 0.9em; cursor: pointer; }
+                .bme .bme-btn { background: var(--bme-muted); color: inherit; border: 1px solid var(--bme-border); border-radius: 4px; padding: 0.4em 0.9em; cursor: pointer; font: inherit; font-size: 0.9em; }
+                .bme .bme-btn:hover:not(:disabled) { border-color: var(--bme-accent); }
+                .bme .bme-btn:disabled { opacity: 0.45; cursor: default; }
+                .bme .bme-btn.bme-primary { background: var(--bme-accent); border-color: var(--bme-accent); color: #fff; font-weight: 600; }
+                .bme .bme-toolbar { display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center; margin: 0.6em 0; }
+                .bme .bme-spacer { flex: 1; }
+                .bme .bme-selcount { font-weight: 600; }
+                .bme .bme-tablewrap { overflow-x: auto; border: 1px solid var(--bme-border); border-radius: 6px; max-height: 60vh; overflow-y: auto; }
+                .bme table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+                .bme th, .bme td { text-align: left; padding: 0.35em 0.6em; border-bottom: 1px solid var(--bme-border); vertical-align: top; }
+                .bme th { position: sticky; top: 0; background: #202020; color: #fff; z-index: 1; white-space: nowrap; }
+                .bme tr.bme-selected td { background: rgba(0, 164, 220, 0.14); }
+                .bme td.bme-cb, .bme th.bme-cb { width: 2em; }
+                .bme td a { color: inherit; }
+                .bme .bme-sub { opacity: 0.65; font-size: 0.9em; }
+                .bme .bme-empty { padding: 1.5em; text-align: center; opacity: 0.7; }
+                .bme .bme-section > summary { cursor: pointer; font-weight: 600; font-size: 1.05em; padding: 0.3em 0; }
+                .bme .bme-section[open] > summary { margin-bottom: 0.5em; }
+                .bme .bme-field { display: grid; grid-template-columns: minmax(12em, 16em) 1fr; gap: 0.5em 1em; padding: 0.45em 0; border-top: 1px dashed var(--bme-border); align-items: start; }
+                .bme .bme-field > .bme-enable { display: flex; align-items: center; gap: 0.45em; cursor: pointer; padding-top: 0.35em; }
+                .bme .bme-field .bme-hint { display: block; opacity: 0.6; font-size: 0.8em; }
+                .bme .bme-field .bme-control { display: flex; flex-direction: column; gap: 0.4em; }
+                .bme .bme-field:not(.bme-on) .bme-control { opacity: 0.4; pointer-events: none; }
+                .bme .bme-field.bme-on > .bme-enable { color: var(--bme-accent); font-weight: 600; }
+                .bme .bme-chips { display: flex; flex-wrap: wrap; gap: 0.3em; align-items: center; }
+                .bme .bme-chip { display: inline-flex; align-items: center; gap: 0.3em; background: rgba(0, 164, 220, 0.2); border-radius: 1em; padding: 0.15em 0.4em 0.15em 0.7em; font-size: 0.9em; }
+                .bme .bme-chip button { background: none; border: 0; color: inherit; cursor: pointer; font-size: 1em; padding: 0 0.2em; }
+                .bme .bme-inline { display: flex; flex-wrap: wrap; gap: 0.4em; align-items: center; }
+                .bme .bme-gridrows { display: flex; flex-direction: column; gap: 0.3em; }
+                .bme .bme-gridrows > div { display: flex; flex-wrap: wrap; gap: 0.3em; }
+                .bme .bme-progress { height: 6px; background: var(--bme-muted); border-radius: 3px; overflow: hidden; margin: 0.5em 0; }
+                .bme .bme-progress > div { height: 100%; width: 0; background: var(--bme-accent); transition: width 0.2s; }
+                .bme .bme-results ul { margin: 0.3em 0; padding-left: 1.3em; }
+                .bme .bme-error { color: #ff6b6b; }
+                .bme .bme-ok { color: #4caf50; }
+                @media (max-width: 700px) { .bme .bme-field { grid-template-columns: 1fr; } }
+            </style>
+
+            <div class="bme">
+                <h2 class="sectionTitle">Bulk Metadata Editor</h2>
+
+                <div class="bme-card">
+                    <div class="bme-row">
+                        <label>Search<input type="search" class="bme-f-search" placeholder="Title contains…" style="width: 16em"></label>
+                        <label>Library<select class="bme-f-library"><option value="">All libraries</option></select></label>
+                        <label>Genre<input type="text" class="bme-f-genre" style="width: 10em"></label>
+                        <label>Tag<input type="text" class="bme-f-tag" style="width: 10em"></label>
+                        <label>Year<input type="number" class="bme-f-year" style="width: 6em" min="1800" max="2200"></label>
+                        <label>Missing
+                            <select class="bme-f-missing">
+                                <option value="">—</option>
+                                <option value="HasOverview">Overview</option>
+                                <option value="HasOfficialRating">Parental rating</option>
+                                <option value="HasImdbId">IMDb ID</option>
+                                <option value="HasTmdbId">TMDb ID</option>
+                                <option value="HasTvdbId">TVDb ID</option>
+                            </select>
+                        </label>
+                        <label>Locked
+                            <select class="bme-f-locked">
+                                <option value="">Any</option>
+                                <option value="true">Locked</option>
+                                <option value="false">Not locked</option>
+                            </select>
+                        </label>
+                        <label>Sort by
+                            <select class="bme-f-sort">
+                                <option value="SortName">Name</option>
+                                <option value="DateCreated">Date added</option>
+                                <option value="PremiereDate">Release date</option>
+                                <option value="ProductionYear">Year</option>
+                                <option value="CommunityRating">Community rating</option>
+                                <option value="OfficialRating">Parental rating</option>
+                            </select>
+                        </label>
+                        <label>Order
+                            <select class="bme-f-order">
+                                <option value="Ascending">Ascending</option>
+                                <option value="Descending">Descending</option>
+                            </select>
+                        </label>
+                        <button type="button" class="bme-btn bme-f-reset">Reset filters</button>
+                    </div>
+                    <div class="bme-types"></div>
+                </div>
+
+                <div class="bme-toolbar">
+                    <span class="bme-selcount">0 selected</span>
+                    <button type="button" class="bme-btn bme-sel-page">Select page</button>
+                    <button type="button" class="bme-btn bme-sel-all">Select all matching</button>
+                    <button type="button" class="bme-btn bme-sel-clear">Clear selection</button>
+                    <span class="bme-spacer"></span>
+                    <span class="bme-pageinfo bme-sub"></span>
+                    <select class="bme-pagesize">
+                        <option value="50">50 / page</option>
+                        <option value="100" selected>100 / page</option>
+                        <option value="250">250 / page</option>
+                        <option value="500">500 / page</option>
+                    </select>
+                    <button type="button" class="bme-btn bme-prev">‹ Prev</button>
+                    <button type="button" class="bme-btn bme-next">Next ›</button>
+                </div>
+
+                <div class="bme-tablewrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="bme-cb"><input type="checkbox" class="bme-sel-header" title="Select this page"></th>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Year</th>
+                                <th>Rating</th>
+                                <th>Genres</th>
+                                <th>Tags</th>
+                                <th title="Metadata locked">🔒</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bme-tbody"></tbody>
+                    </table>
+                </div>
+
+                <h2 class="sectionTitle">Edit metadata for selected items</h2>
+                <p class="bme-sub">Tick a field to include it in the update. Unticked fields are left alone. A ticked text, number or date field left empty clears that field. List fields can add values, remove values or replace the whole list.</p>
+
+                <div class="bme-editor"></div>
+
+                <div class="bme-card">
+                    <label class="bme-inline" style="cursor: pointer">
+                        <input type="checkbox" class="bme-lock-edited">
+                        Lock edited fields so a metadata refresh does not overwrite them (Title, Overview, Genres, Tags, Studios, People, Parental rating, Production locations, Run time)
+                    </label>
+                    <div class="bme-toolbar">
+                        <button type="button" class="bme-btn bme-primary bme-apply" disabled>Apply to 0 items</button>
+                        <button type="button" class="bme-btn bme-clearform">Untick all fields</button>
+                        <span class="bme-status bme-sub"></span>
+                    </div>
+                    <div class="bme-progress" hidden><div></div></div>
+                    <div class="bme-results"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        (function () {
+            'use strict';
+
+            var ITEM_TYPES = [
+                ['Movie', 'Movies'], ['Series', 'Shows'], ['Season', 'Seasons'], ['Episode', 'Episodes'],
+                ['BoxSet', 'Collections'], ['MusicAlbum', 'Albums'], ['MusicArtist', 'Artists'], ['Audio', 'Songs'],
+                ['MusicVideo', 'Music videos'], ['Video', 'Videos'], ['Trailer', 'Trailers'], ['Book', 'Books'],
+                ['AudioBook', 'Audiobooks'], ['Playlist', 'Playlists'], ['PhotoAlbum', 'Photo albums'], ['Photo', 'Photos']
+            ];
+            var DEFAULT_TYPES = ['Movie', 'Series', 'BoxSet'];
+            var TYPE_LABELS = {};
+            ITEM_TYPES.forEach(function (t) { TYPE_LABELS[t[0]] = t[1].replace(/s$/, ''); });
+
+            var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            var LOCKABLE_FIELDS = [
+                ['Name', 'Title'], ['Overview', 'Overview'], ['Genres', 'Genres'], ['OfficialRating', 'Parental rating'],
+                ['Cast', 'People'], ['Studios', 'Studios'], ['Tags', 'Tags'], ['ProductionLocations', 'Production locations'],
+                ['Runtime', 'Run time']
+            ];
+            var PERSON_KINDS = ['Actor', 'Director', 'Writer', 'Producer', 'GuestStar', 'Composer', 'Conductor', 'Lyricist',
+                'Arranger', 'Engineer', 'Mixer', 'Remixer', 'Creator', 'Artist', 'AlbumArtist', 'Author', 'Illustrator',
+                'Penciller', 'Inker', 'Colorist', 'Letterer', 'CoverArtist', 'Editor', 'Translator', 'Narrator', 'Unknown'];
+            var DISPLAY_ORDERS = ['aired', 'originalAirDate', 'absolute', 'dvd', 'digital', 'storyArc', 'production', 'tv',
+                'alternate', 'regional', 'alternateDvd', 'PremiereDate', 'SortName', 'Default'];
+            var UPDATE_BATCH_SIZE = 20;
+            var LIST_FIELDS = 'Genres,Tags,Path,DateCreated,SortName';
+
+            function el(tag, attrs, children) {
+                var node = document.createElement(tag);
+                Object.keys(attrs || {}).forEach(function (k) {
+                    var v = attrs[k];
+                    if (v === undefined || v === null || v === false) return;
+                    if (k === 'text') node.textContent = v;
+                    else if (k === 'className') node.className = v;
+                    else if (k.indexOf('on') === 0) node.addEventListener(k.substring(2), v);
+                    else if (k in node && typeof v !== 'string') node[k] = v;
+                    else node.setAttribute(k, v === true ? '' : v);
+                });
+                (children || []).forEach(function (c) {
+                    if (c === null || c === undefined) return;
+                    node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+                });
+                return node;
+            }
+
+            function cleanQuery(q) {
+                var out = {};
+                Object.keys(q).forEach(function (k) {
+                    if (q[k] !== '' && q[k] !== null && q[k] !== undefined) out[k] = q[k];
+                });
+                return out;
+            }
+
+            function getJson(path, query) {
+                return ApiClient.getJSON(ApiClient.getUrl(path, cleanQuery(query || {})));
+            }
+
+            function postJson(path, body) {
+                return ApiClient.ajax({
+                    type: 'POST',
+                    url: ApiClient.getUrl(path),
+                    data: JSON.stringify(body),
+                    contentType: 'application/json',
+                    dataType: 'json'
+                });
+            }
+
+            function notify(message) {
+                if (window.Dashboard && Dashboard.alert) Dashboard.alert(message);
+                else window.alert(message);
+            }
+
+            function debounce(fn, ms) {
+                var t;
+                return function () {
+                    clearTimeout(t);
+                    t = setTimeout(fn, ms);
+                };
+            }
+
+            function modeSelect() {
+                return el('select', { className: 'bme-mode' }, [
+                    el('option', { value: 'Add', text: 'Add to existing' }),
+                    el('option', { value: 'Remove', text: 'Remove from existing' }),
+                    el('option', { value: 'Replace', text: 'Replace all with' })
+                ]);
+            }
+
+            function init(page) {
+                var uid = 'bme' + Math.random().toString(36).slice(2, 8);
+                var userId = ApiClient.getCurrentUserId();
+                var serverId = ApiClient.serverId();
+                var $ = function (sel) { return page.querySelector(sel); };
+
+                var state = {
+                    startIndex: 0,
+                    total: 0,
+                    items: [],
+                    selected: new Map(), // id -> Type
+                    requestSeq: 0,
+                    externalIdTypes: {},
+                    busy: false
+                };
+                var fields = [];
+
+                // ---------- datalists shared by filter and editor inputs ----------
+                var lists = {};
+                ['genres', 'tags', 'studios', 'ratings', 'cultures', 'providers', 'orders', 'people'].forEach(function (name) {
+                    var id = uid + '-' + name;
+                    var dl = el('datalist', { id: id });
+                    page.appendChild(dl);
+                    lists[name] = { id: id, node: dl };
+                });
+
+                function fillList(name, values) {
+                    var dl = lists[name].node;
+                    dl.innerHTML = '';
+                    values.forEach(function (v) {
+                        var opt = Array.isArray(v) ? el('option', { value: v[0], label: v[1] }) : el('option', { value: v });
+                        dl.appendChild(opt);
+                    });
+                }
+
+                fillList('orders', DISPLAY_ORDERS);
+                $('.bme-f-genre').setAttribute('list', lists.genres.id);
+                $('.bme-f-tag').setAttribute('list', lists.tags.id);
+
+                // ---------- filters ----------
+                var typesBox = $('.bme-types');
+                ITEM_TYPES.forEach(function (t) {
+                    typesBox.appendChild(el('label', {}, [
+                        el('input', { type: 'checkbox', value: t[0], checked: DEFAULT_TYPES.indexOf(t[0]) !== -1, onchange: reload }),
+                        t[1]
+                    ]));
+                });
+
+                function selectedTypes() {
+                    var types = Array.prototype.map.call(typesBox.querySelectorAll('input:checked'), function (i) { return i.value; });
+                    return types.length ? types : ITEM_TYPES.map(function (t) { return t[0]; });
+                }
+
+                function buildQuery() {
+                    var q = {
+                        userId: userId,
+                        Recursive: true,
+                        IncludeItemTypes: selectedTypes().join(','),
+                        SearchTerm: $('.bme-f-search').value.trim(),
+                        ParentId: $('.bme-f-library').value,
+                        Genres: $('.bme-f-genre').value.trim(),
+                        Tags: $('.bme-f-tag').value.trim(),
+                        Years: $('.bme-f-year').value,
+                        IsLocked: $('.bme-f-locked').value,
+                        SortBy: $('.bme-f-sort').value + (($('.bme-f-sort').value === 'SortName') ? '' : ',SortName'),
+                        SortOrder: $('.bme-f-order').value,
+                        EnableImages: false,
+                        EnableUserData: false
+                    };
+                    var missing = $('.bme-f-missing').value;
+                    if (missing) q[missing] = false;
+                    return q;
+                }
+
+                function reload() {
+                    state.startIndex = 0;
+                    loadPage();
+                }
+
+                ['.bme-f-library', '.bme-f-genre', '.bme-f-tag', '.bme-f-year', '.bme-f-missing', '.bme-f-locked', '.bme-f-sort', '.bme-f-order']
+                    .forEach(function (sel) { $(sel).addEventListener('change', reload); });
+                $('.bme-f-search').addEventListener('input', debounce(reload, 400));
+                $('.bme-f-reset').addEventListener('click', function () {
+                    page.querySelectorAll('.bme-card input[type=search], .bme-card input[type=text], .bme-card input[type=number]').forEach(function (i) {
+                        if (i.closest('.bme-editor')) return;
+                        i.value = '';
+                    });
+                    ['.bme-f-library', '.bme-f-missing', '.bme-f-locked'].forEach(function (sel) { $(sel).value = ''; });
+                    $('.bme-f-sort').value = 'SortName';
+                    $('.bme-f-order').value = 'Ascending';
+                    typesBox.querySelectorAll('input').forEach(function (i) { i.checked = DEFAULT_TYPES.indexOf(i.value) !== -1; });
+                    reload();
+                });
+
+                // ---------- item list ----------
+                function displayName(item) {
+                    if (item.Type === 'Episode') {
+                        var num = (item.ParentIndexNumber != null ? 'S' + item.ParentIndexNumber : '') + (item.IndexNumber != null ? 'E' + item.IndexNumber : '');
+                        return [item.Name, [item.SeriesName, num].filter(Boolean).join(' ')];
+                    }
+                    if (item.Type === 'Season') return [item.Name, item.SeriesName];
+                    if (item.Type === 'Audio') return [item.Name, [(item.AlbumArtist || ''), (item.Album || '')].filter(Boolean).join(' – ')];
+                    if (item.Type === 'MusicAlbum') return [item.Name, item.AlbumArtist];
+                    return [item.Name, null];
+                }
+
+                function loadPage() {
+                    var seq = ++state.requestSeq;
+                    var limit = parseInt($('.bme-pagesize').value, 10);
+                    var q = buildQuery();
+                    q.StartIndex = state.startIndex;
+                    q.Limit = limit;
+                    q.Fields = LIST_FIELDS;
+                    q.EnableTotalRecordCount = true;
+
+                    $('.bme-tbody').innerHTML = '';
+                    $('.bme-tbody').appendChild(el('tr', {}, [el('td', { colspan: 8, className: 'bme-empty', text: 'Loading…' })]));
+
+                    getJson('Items', q).then(function (result) {
+                        if (seq !== state.requestSeq) return;
+                        state.items = result.Items || [];
+                        state.total = result.TotalRecordCount || 0;
+                        renderTable();
+                    }, function (err) {
+                        if (seq !== state.requestSeq) return;
+                        console.error('BulkMetadataEditor: failed to load items', err);
+                        $('.bme-tbody').innerHTML = '';
+                        $('.bme-tbody').appendChild(el('tr', {}, [el('td', { colspan: 8, className: 'bme-empty bme-error', text: 'Failed to load items.' })]));
+                    });
+                }
+
+                function renderTable() {
+                    var tbody = $('.bme-tbody');
+                    tbody.innerHTML = '';
+                    if (!state.items.length) {
+                        tbody.appendChild(el('tr', {}, [el('td', { colspan: 8, className: 'bme-empty', text: 'No items match these filters.' })]));
+                    }
+
+                    state.items.forEach(function (item) {
+                        var names = displayName(item);
+                        var isSel = state.selected.has(item.Id);
+                        var cb = el('input', { type: 'checkbox', checked: isSel });
+                        var row = el('tr', { className: isSel ? 'bme-selected' : '' }, [
+                            el('td', { className: 'bme-cb' }, [cb]),
+                            el('td', {}, [
+                                el('a', { href: '#/details?id=' + item.Id + '&serverId=' + serverId, target: '_blank', text: names[0] || '(untitled)' }),
+                                names[1] ? el('div', { className: 'bme-sub', text: names[1] }) : null
+                            ]),
+                            el('td', { text: TYPE_LABELS[item.Type] || item.Type }),
+                            el('td', { text: item.ProductionYear || '' }),
+                            el('td', { text: item.OfficialRating || '' }),
+                            el('td', { className: 'bme-sub', text: (item.Genres || []).join(', ') }),
+                            el('td', { className: 'bme-sub', text: (item.Tags || []).join(', ') }),
+                            el('td', { text: item.LockData ? '🔒' : '' })
+                        ]);
+                        cb.addEventListener('change', function () {
+                            setSelected(item.Id, item.Type, cb.checked);
+                            row.className = cb.checked ? 'bme-selected' : '';
+                            updateSelectionUi();
+                        });
+                        tbody.appendChild(row);
+                    });
+
+                    var limit = parseInt($('.bme-pagesize').value, 10);
+                    var from = state.total ? state.startIndex + 1 : 0;
+                    var to = Math.min(state.startIndex + limit, state.total);
+                    $('.bme-pageinfo').textContent = from + '–' + to + ' of ' + state.total;
+                    $('.bme-prev').disabled = state.startIndex === 0;
+                    $('.bme-next').disabled = state.startIndex + limit >= state.total;
+                    $('.bme-sel-all').textContent = 'Select all ' + state.total + ' matching';
+                    updateSelectionUi();
+                }
+
+                function setSelected(id, type, on) {
+                    if (on) state.selected.set(id, type);
+                    else state.selected.delete(id);
+                }
+
+                function updateSelectionUi() {
+                    var n = state.selected.size;
+                    $('.bme-selcount').textContent = n + ' selected';
+                    var pageSelected = state.items.length > 0 && state.items.every(function (i) { return state.selected.has(i.Id); });
+                    var someSelected = state.items.some(function (i) { return state.selected.has(i.Id); });
+                    $('.bme-sel-header').checked = pageSelected;
+                    $('.bme-sel-header').indeterminate = !pageSelected && someSelected;
+                    updateApplyButton();
+                    refreshExternalIdsDebounced();
+                }
+
+                function selectPage(on) {
+                    state.items.forEach(function (i) { setSelected(i.Id, i.Type, on); });
+                    renderTable();
+                }
+
+                $('.bme-sel-header').addEventListener('change', function (e) { selectPage(e.target.checked); });
+                $('.bme-sel-page').addEventListener('click', function () { selectPage(true); });
+                $('.bme-sel-clear').addEventListener('click', function () {
+                    state.selected.clear();
+                    renderTable();
+                });
+                $('.bme-sel-all').addEventListener('click', function () {
+                    var q = buildQuery();
+                    q.EnableTotalRecordCount = false;
+                    var btn = $('.bme-sel-all');
+                    btn.disabled = true;
+                    getJson('Items', q).then(function (result) {
+                        (result.Items || []).forEach(function (i) { setSelected(i.Id, i.Type, true); });
+                        renderTable();
+                    }, function (err) {
+                        console.error('BulkMetadataEditor: select all failed', err);
+                        notify('Could not load all matching items.');
+                    }).then(function () { btn.disabled = false; });
+                });
+                $('.bme-prev').addEventListener('click', function () {
+                    state.startIndex = Math.max(0, state.startIndex - parseInt($('.bme-pagesize').value, 10));
+                    loadPage();
+                });
+                $('.bme-next').addEventListener('click', function () {
+                    state.startIndex += parseInt($('.bme-pagesize').value, 10);
+                    loadPage();
+                });
+                $('.bme-pagesize').addEventListener('change', reload);
+
+                // ---------- editor controls ----------
+                function textControl(f) {
+                    var input = el(f.multiline ? 'textarea' : 'input', { type: f.multiline ? null : 'text', placeholder: f.placeholder || 'Leave empty to clear', list: f.list ? lists[f.list].id : null, style: f.multiline ? null : 'width: 100%; max-width: 32em' });
+                    return { node: input, read: function () { return { Value: input.value.trim() || null }; } };
+                }
+
+                function numberControl(f) {
+                    var input = el('input', { type: 'number', step: f.step || 1, min: f.min, max: f.max, placeholder: 'Empty clears', style: 'width: 10em' });
+                    return {
+                        node: input,
+                        read: function () {
+                            if (input.value === '') return { Value: null };
+                            var v = f.step ? parseFloat(input.value) : parseInt(input.value, 10);
+                            if (isNaN(v)) throw new Error(f.label + ': not a number');
+                            return { Value: v };
+                        }
+                    };
+                }
+
+                function dateControl(f) {
+                    var input = el('input', { type: 'date' });
+                    return {
+                        node: input,
+                        read: function () {
+                            if (!input.value) {
+                                if (f.required) throw new Error(f.label + ' cannot be empty');
+                                return { Value: null };
+                            }
+                            return { Value: input.value + 'T00:00:00.000Z' };
+                        }
+                    };
+                }
+
+                function selectControl(f) {
+                    var select = el('select', {}, f.options().map(function (o) { return el('option', { value: o[0], text: o[1] }); }));
+                    return { node: select, read: function () { return { Value: select.value || null }; } };
+                }
+
+                function boolControl() {
+                    var select = el('select', {}, [el('option', { value: 'true', text: 'Yes' }), el('option', { value: 'false', text: 'No' })]);
+                    return { node: select, read: function () { return { Value: select.value === 'true' }; } };
+                }
+
+                function chipsControl(f) {
+                    var mode = modeSelect();
+                    var values = [];
+                    var chips = el('div', { className: 'bme-chips' });
+                    var input = el('input', { type: 'text', placeholder: 'Type and press Enter', list: f.list ? lists[f.list].id : null, style: 'width: 14em' });
+
+                    function render() {
+                        chips.innerHTML = '';
+                        values.forEach(function (v, idx) {
+                            chips.appendChild(el('span', { className: 'bme-chip' }, [v, el('button', {
+                                type: 'button', title: 'Remove', text: '×',
+                                onclick: function () { values.splice(idx, 1); render(); }
+                            })]));
+                        });
+                        chips.appendChild(input);
+                    }
+
+                    function commit() {
+                        input.value.split(/[;|]/).forEach(function (part) {
+                            var v = part.trim();
+                            if (v && !values.some(function (x) { return x.toLowerCase() === v.toLowerCase(); })) values.push(v);
+                        });
+                        input.value = '';
+                        render();
+                    }
+
+                    input.addEventListener('keydown', function (e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            commit();
+                        } else if (e.key === 'Backspace' && !input.value && values.length) {
+                            values.pop();
+                            render();
+                        }
+                    });
+                    input.addEventListener('change', function () {
+                        // A datalist pick fires change without Enter
+                        if (input.value && Array.prototype.some.call(lists[f.list] ? lists[f.list].node.options : [], function (o) { return o.value === input.value; })) commit();
+                    });
+                    render();
+
+                    return {
+                        node: el('div', { className: 'bme-gridrows' }, [mode, chips]),
+                        read: function () {
+                            commit();
+                            if (!values.length && mode.value !== 'Replace') throw new Error(f.label + ': add at least one value');
+                            return { Mode: mode.value, Values: values.slice() };
+                        }
+                    };
+                }
+
+                function checksControl(f) {
+                    var mode = modeSelect();
+                    var box = el('div', { className: 'bme-checks bme-inline' }, f.options.map(function (o) {
+                        return el('label', {}, [el('input', { type: 'checkbox', value: o[0] }), o[1]]);
+                    }));
+                    return {
+                        node: el('div', { className: 'bme-gridrows' }, [mode, box]),
+                        read: function () {
+                            var values = Array.prototype.map.call(box.querySelectorAll('input:checked'), function (i) { return i.value; });
+                            if (!values.length && mode.value !== 'Replace') throw new Error(f.label + ': tick at least one value');
+                            return { Mode: mode.value, Values: values };
+                        }
+                    };
+                }
+
+                function peopleControl(f) {
+                    var mode = modeSelect();
+                    var rows = el('div', { className: 'bme-gridrows' });
+
+                    function addRow() {
+                        var kind = el('select', { className: 'bme-p-type' }, [el('option', { value: '', text: '(any type)' })].concat(
+                            PERSON_KINDS.map(function (k) { return el('option', { value: k, text: k }); })));
+                        kind.value = 'Actor';
+                        var row = el('div', {}, [
+                            el('input', { type: 'text', className: 'bme-p-name', placeholder: 'Name', list: lists.people.id, style: 'width: 14em' }),
+                            kind,
+                            el('input', { type: 'text', className: 'bme-p-role', placeholder: 'Role (optional)', style: 'width: 12em' }),
+                            el('button', { type: 'button', className: 'bme-btn', text: '×', title: 'Remove row', onclick: function () { row.remove(); } })
+                        ]);
+                        rows.appendChild(row);
+                    }
+
+                    addRow();
+                    return {
+                        node: el('div', { className: 'bme-gridrows' }, [
+                            mode, rows,
+                            el('div', {}, [el('button', { type: 'button', className: 'bme-btn', text: '+ Add person', onclick: addRow })]),
+                            el('span', { className: 'bme-hint', text: 'When removing, "(any type)" removes the person in every role.' })
+                        ]),
+                        read: function () {
+                            var people = Array.prototype.map.call(rows.children, function (r) {
+                                return {
+                                    Name: r.querySelector('.bme-p-name').value.trim(),
+                                    Type: r.querySelector('.bme-p-type').value || null,
+                                    Role: r.querySelector('.bme-p-role').value.trim() || null
+                                };
+                            }).filter(function (p) { return p.Name; });
+                            if (!people.length && mode.value !== 'Replace') throw new Error(f.label + ': add at least one person');
+                            return { Mode: mode.value, People: people };
+                        }
+                    };
+                }
+
+                function providerIdsControl() {
+                    var rows = el('div', { className: 'bme-gridrows' });
+
+                    function addRow() {
+                        var action = el('select', { className: 'bme-x-action' }, [
+                            el('option', { value: 'set', text: 'Set to' }),
+                            el('option', { value: 'remove', text: 'Remove' })
+                        ]);
+                        var value = el('input', { type: 'text', className: 'bme-x-value', placeholder: 'ID', style: 'width: 14em' });
+                        action.addEventListener('change', function () { value.disabled = action.value === 'remove'; });
+                        var row = el('div', {}, [
+                            el('input', { type: 'text', className: 'bme-x-key', placeholder: 'Provider (e.g. Imdb)', list: lists.providers.id, style: 'width: 12em' }),
+                            action, value,
+                            el('button', { type: 'button', className: 'bme-btn', text: '×', title: 'Remove row', onclick: function () { row.remove(); } })
+                        ]);
+                        rows.appendChild(row);
+                    }
+
+                    addRow();
+                    return {
+                        node: el('div', { className: 'bme-gridrows' }, [
+                            rows,
+                            el('div', {}, [el('button', { type: 'button', className: 'bme-btn', text: '+ Add provider', onclick: addRow })]),
+                            el('span', { className: 'bme-hint', text: 'Setting the same ID on many items is rarely what you want. Removing an ID is the common bulk use.' })
+                        ]),
+                        read: function () {
+                            var result = { Set: {}, Remove: [] };
+                            Array.prototype.forEach.call(rows.children, function (r) {
+                                var key = r.querySelector('.bme-x-key').value.trim();
+                                if (!key) return;
+                                if (r.querySelector('.bme-x-action').value === 'remove') result.Remove.push(key);
+                                else result.Set[key] = r.querySelector('.bme-x-value').value.trim();
+                            });
+                            if (!result.Remove.length && !Object.keys(result.Set).length) throw new Error('External IDs: add at least one provider');
+                            return result;
+                        }
+                    };
+                }
+
+                var refData = { ratings: [], cultures: [], countries: [] };
+
+                var SECTIONS = [
+                    {
+                        title: 'General', open: true, fields: [
+                            { key: 'Name', label: 'Title', kind: textControl, placeholder: 'New title' },
+                            { key: 'OriginalTitle', label: 'Original title', kind: textControl },
+                            { key: 'ForcedSortName', label: 'Sort title', kind: textControl },
+                            { key: 'DateCreated', label: 'Date added', kind: dateControl, required: true },
+                            { key: 'Status', label: 'Status', hint: 'Series only', kind: selectControl, options: function () { return [['', '(none)'], ['Continuing', 'Continuing'], ['Ended', 'Ended'], ['Unreleased', 'Unreleased']]; } },
+                            { key: 'PremiereDate', label: 'Release date', kind: dateControl },
+                            { key: 'ProductionYear', label: 'Year', kind: numberControl, min: 1, max: 9999 },
+                            { key: 'AirDays', label: 'Air days', hint: 'Series only', kind: checksControl, options: DAYS.map(function (d) { return [d, d.slice(0, 3)]; }) },
+                            { key: 'AirTime', label: 'Air time', hint: 'Series only', kind: textControl, placeholder: 'e.g. 8:00 PM' },
+                            { key: 'EndDate', label: 'End date', kind: dateControl },
+                            { key: 'RunTimeMinutes', label: 'Run time (minutes)', hint: 'Series only, as in the stock editor', kind: numberControl, min: 0 },
+                            { key: 'CommunityRating', label: 'Community rating', hint: '0–10', kind: numberControl, step: 0.1, min: 0, max: 10 },
+                            { key: 'CriticRating', label: 'Critic rating', hint: '0–100', kind: numberControl, step: 1, min: 0, max: 100 },
+                            { key: 'OriginalLanguage', label: 'Original language', kind: textControl, list: 'cultures', placeholder: 'e.g. en' },
+                            { key: 'Tagline', label: 'Tagline', kind: textControl },
+                            { key: 'Overview', label: 'Overview', kind: textControl, multiline: true }
+                        ]
+                    },
+                    {
+                        title: 'Parental rating', open: true, fields: [
+                            { key: 'OfficialRating', label: 'Parental rating', hint: 'Also applied to seasons, episodes and tracks of selected shows/albums', kind: textControl, list: 'ratings' },
+                            { key: 'CustomRating', label: 'Custom rating', hint: 'Also applied to child items', kind: textControl, list: 'ratings' }
+                        ]
+                    },
+                    {
+                        title: 'Genres, tags, studios & people', open: true, fields: [
+                            { key: 'Genres', label: 'Genres', kind: chipsControl, list: 'genres' },
+                            { key: 'Tags', label: 'Tags', hint: 'Also applied to child items of shows/seasons/albums', kind: chipsControl, list: 'tags' },
+                            { key: 'Studios', label: 'Studios', kind: chipsControl, list: 'studios' },
+                            { key: 'ProductionLocations', label: 'Production locations', kind: chipsControl },
+                            { key: 'People', label: 'People', kind: peopleControl }
+                        ]
+                    },
+                    {
+                        title: 'Music', fields: [
+                            { key: 'Album', label: 'Album', hint: 'Songs and music videos', kind: textControl },
+                            { key: 'AlbumArtists', label: 'Album artists', kind: chipsControl },
+                            { key: 'Artists', label: 'Artists', kind: chipsControl }
+                        ]
+                    },
+                    {
+                        title: 'Numbering', fields: [
+                            { key: 'IndexNumber', label: 'Number', hint: 'Episode / season / track number', kind: numberControl, min: 0 },
+                            { key: 'ParentIndexNumber', label: 'Parent number', hint: 'Season number of an episode, disc number of a track', kind: numberControl, min: 0 },
+                            { key: 'AirsBeforeSeasonNumber', label: 'Airs before season', hint: 'Episodes (specials)', kind: numberControl, min: 0 },
+                            { key: 'AirsAfterSeasonNumber', label: 'Airs after season', hint: 'Episodes (specials)', kind: numberControl, min: 0 },
+                            { key: 'AirsBeforeEpisodeNumber', label: 'Airs before episode', hint: 'Episodes (specials)', kind: numberControl, min: 0 }
+                        ]
+                    },
+                    {
+                        title: 'Video', fields: [
+                            { key: 'AspectRatio', label: 'Original aspect ratio', kind: textControl, placeholder: 'e.g. 2.39:1' },
+                            { key: 'Video3DFormat', label: '3D format', kind: selectControl, options: function () { return [['', '(none)'], ['HalfSideBySide', 'Half side by side'], ['FullSideBySide', 'Full side by side'], ['HalfTopAndBottom', 'Half top and bottom'], ['FullTopAndBottom', 'Full top and bottom'], ['MVC', 'MVC']]; } }
+                        ]
+                    },
+                    {
+                        title: 'External IDs', fields: [
+                            { key: 'ProviderIds', label: 'External IDs', kind: providerIdsControl }
+                        ]
+                    },
+                    {
+                        title: 'Metadata settings', fields: [
+                            { key: 'PreferredMetadataLanguage', label: 'Preferred metadata language', kind: selectControl, options: function () { return [['', '(inherit)']].concat(refData.cultures.map(function (c) { return [c.TwoLetterISOLanguageName, c.DisplayName]; })); } },
+                            { key: 'PreferredMetadataCountryCode', label: 'Country', kind: selectControl, options: function () { return [['', '(inherit)']].concat(refData.countries.map(function (c) { return [c.TwoLetterISORegionName, c.DisplayName]; })); } },
+                            { key: 'DisplayOrder', label: 'Display order', hint: 'Shows and collections. Changing it on a show triggers a full refresh.', kind: textControl, list: 'orders' }
+                        ]
+                    },
+                    {
+                        title: 'Locking', fields: [
+                            { key: 'LockData', label: 'Lock this item', hint: 'Prevents future metadata changes; applied to children of folders', kind: boolControl },
+                            { key: 'LockedFields', label: 'Locked fields', kind: checksControl, options: LOCKABLE_FIELDS }
+                        ]
+                    }
+                ];
+
+                function buildEditor() {
+                    var editor = $('.bme-editor');
+                    editor.innerHTML = '';
+                    fields = [];
+                    SECTIONS.forEach(function (section) {
+                        var details = el('details', { className: 'bme-section bme-card', open: !!section.open }, [el('summary', { text: section.title })]);
+                        section.fields.forEach(function (f) {
+                            var control = f.kind(f);
+                            var toggle = el('input', { type: 'checkbox' });
+                            var row = el('div', { className: 'bme-field' }, [
+                                el('label', { className: 'bme-enable' }, [toggle, el('span', {}, [f.label, f.hint ? el('span', { className: 'bme-hint', text: f.hint }) : null])]),
+                                el('div', { className: 'bme-control' }, [control.node])
+                            ]);
+                            toggle.addEventListener('change', function () {
+                                row.classList.toggle('bme-on', toggle.checked);
+                                updateApplyButton();
+                            });
+                            // Editing a control ticks its field automatically
+                            control.node.addEventListener('input', function () {
+                                if (!toggle.checked) {
+                                    toggle.checked = true;
+                                    row.classList.add('bme-on');
+                                    updateApplyButton();
+                                }
+                            });
+                            fields.push({ def: f, toggle: toggle, row: row, control: control });
+                            details.appendChild(row);
+                        });
+                        editor.appendChild(details);
+                    });
+                }
+
+                function enabledFields() {
+                    return fields.filter(function (f) { return f.toggle.checked; });
+                }
+
+                function updateApplyButton() {
+                    var n = state.selected.size;
+                    var count = enabledFields().length;
+                    var btn = $('.bme-apply');
+                    btn.textContent = 'Apply ' + count + ' field' + (count === 1 ? '' : 's') + ' to ' + n + ' item' + (n === 1 ? '' : 's');
+                    btn.disabled = state.busy || n === 0 || count === 0;
+                }
+
+                $('.bme-clearform').addEventListener('click', function () {
+                    fields.forEach(function (f) {
+                        f.toggle.checked = false;
+                        f.row.classList.remove('bme-on');
+                    });
+                    updateApplyButton();
+                });
+
+                // ---------- external id suggestions for the selected item types ----------
+                var refreshExternalIdsDebounced = debounce(function () {
+                    var byType = {};
+                    state.selected.forEach(function (type, id) {
+                        if (!byType[type]) byType[type] = id;
+                    });
+                    var pending = Object.keys(byType).filter(function (t) { return !state.externalIdTypes[t]; });
+                    if (!pending.length) return renderProviders();
+                    Promise.all(pending.map(function (type) {
+                        return getJson('Items/' + byType[type] + '/ExternalIdInfos').then(function (infos) {
+                            state.externalIdTypes[type] = infos || [];
+                        }, function () { state.externalIdTypes[type] = []; });
+                    })).then(renderProviders);
+                }, 500);
+
+                function renderProviders() {
+                    var seen = {};
+                    var values = [];
+                    Object.keys(state.externalIdTypes).forEach(function (t) {
+                        state.externalIdTypes[t].forEach(function (info) {
+                            if (!seen[info.Key]) {
+                                seen[info.Key] = true;
+                                values.push([info.Key, info.Name + (info.Type ? ' (' + info.Type + ')' : '')]);
+                            }
+                        });
+                    });
+                    fillList('providers', values);
+                }
+
+                // ---------- apply ----------
+                function collectChanges() {
+                    var changes = {};
+                    enabledFields().forEach(function (f) {
+                        changes[f.def.key] = f.control.read();
+                    });
+                    return changes;
+                }
+
+                function summarizeResults(results, container) {
+                    var ok = results.filter(function (r) { return r.Success; });
+                    var failed = results.filter(function (r) { return !r.Success; });
+                    var skipCounts = {};
+                    results.forEach(function (r) {
+                        (r.Skipped || []).forEach(function (s) { skipCounts[s] = (skipCounts[s] || 0) + 1; });
+                    });
+
+                    container.innerHTML = '';
+                    container.appendChild(el('p', {}, [
+                        el('span', { className: 'bme-ok', text: ok.length + ' item(s) updated. ' }),
+                        failed.length ? el('span', { className: 'bme-error', text: failed.length + ' failed.' }) : null
+                    ]));
+
+                    var skipKeys = Object.keys(skipCounts);
+                    if (skipKeys.length) {
+                        container.appendChild(el('div', { text: 'Fields left unchanged because they do not apply to the item type (or the value was invalid):' }));
+                        container.appendChild(el('ul', {}, skipKeys.map(function (k) { return el('li', { text: k + ' — ' + skipCounts[k] + ' item(s)' }); })));
+                    }
+
+                    if (failed.length) {
+                        container.appendChild(el('details', {}, [
+                            el('summary', { className: 'bme-error', text: 'Show failures' }),
+                            el('ul', {}, failed.map(function (r) { return el('li', { text: (r.Name || r.Id) + ': ' + (r.Error || 'unknown error') }); }))
+                        ]));
+                    }
+                }
+
+                $('.bme-apply').addEventListener('click', function () {
+                    var changes;
+                    try {
+                        changes = collectChanges();
+                    } catch (e) {
+                        notify(e.message);
+                        return;
+                    }
+
+                    var ids = Array.from(state.selected.keys());
+                    var fieldNames = enabledFields().map(function (f) { return f.def.label; });
+                    if (!window.confirm('Apply changes to ' + ids.length + ' item(s)?\n\nFields: ' + fieldNames.join(', ') + '\n\nThis cannot be undone.')) {
+                        return;
+                    }
+
+                    var lockEdited = $('.bme-lock-edited').checked;
+                    var progress = $('.bme-progress');
+                    var bar = progress.firstElementChild;
+                    var status = $('.bme-status');
+                    var allResults = [];
+                    state.busy = true;
+                    updateApplyButton();
+                    progress.hidden = false;
+                    bar.style.width = '0';
+                    $('.bme-results').innerHTML = '';
+
+                    var batches = [];
+                    for (var i = 0; i < ids.length; i += UPDATE_BATCH_SIZE) batches.push(ids.slice(i, i + UPDATE_BATCH_SIZE));
+
+                    var chain = Promise.resolve();
+                    batches.forEach(function (batch, idx) {
+                        chain = chain.then(function () {
+                            status.textContent = 'Updating ' + Math.min((idx + 1) * UPDATE_BATCH_SIZE, ids.length) + ' of ' + ids.length + '…';
+                            return postJson('BulkMetadataEditor/Update', { ItemIds: batch, Changes: changes, LockEditedFields: lockEdited })
+                                .then(function (response) {
+                                    allResults = allResults.concat(response.Results || []);
+                                }, function (err) {
+                                    console.error('BulkMetadataEditor: batch failed', err);
+                                    batch.forEach(function (id) { allResults.push({ Id: id, Success: false, Error: 'Request failed' + (err && err.status ? ' (HTTP ' + err.status + ')' : '') }); });
+                                })
+                                .then(function () { bar.style.width = Math.round(((idx + 1) / batches.length) * 100) + '%'; });
+                        });
+                    });
+
+                    chain.then(function () {
+                        state.busy = false;
+                        status.textContent = 'Done.';
+                        summarizeResults(allResults, $('.bme-results'));
+                        updateApplyButton();
+                        loadPage();
+                        loadSuggestions();
+                    });
+                });
+
+                // ---------- reference data ----------
+                function loadSuggestions() {
+                    getJson('Items/Filters', { userId: userId }).then(function (f) {
+                        fillList('genres', f.Genres || []);
+                        fillList('tags', f.Tags || []);
+                    }, function () { /* suggestions are optional */ });
+                    getJson('Studios', { userId: userId, Limit: 2000, EnableImages: false, EnableTotalRecordCount: false }).then(function (r) {
+                        fillList('studios', (r.Items || []).map(function (s) { return s.Name; }));
+                    }, function () { /* optional */ });
+                }
+
+                function loadLibraries() {
+                    return getJson('Library/MediaFolders', { IsHidden: false }).then(function (r) {
+                        var select = $('.bme-f-library');
+                        (r.Items || []).forEach(function (lib) { select.appendChild(el('option', { value: lib.Id, text: lib.Name })); });
+                    }, function () { /* library filter is optional */ });
+                }
+
+                function loadReferenceData() {
+                    var ok = function (key) { return function (v) { refData[key] = v || []; }; };
+                    var ignore = function () { };
+                    return Promise.all([
+                        getJson('Localization/ParentalRatings').then(ok('ratings'), ignore),
+                        getJson('Localization/Cultures').then(ok('cultures'), ignore),
+                        getJson('Localization/Countries').then(ok('countries'), ignore)
+                    ]).then(function () {
+                        var seen = {};
+                        fillList('ratings', refData.ratings.map(function (r) { return r.Name; }).filter(function (n) {
+                            if (seen[n]) return false;
+                            seen[n] = true;
+                            return true;
+                        }));
+                        fillList('cultures', refData.cultures.map(function (c) { return [c.TwoLetterISOLanguageName, c.DisplayName]; }));
+                        refData.cultures.sort(function (a, b) { return a.DisplayName.localeCompare(b.DisplayName); });
+                        refData.countries.sort(function (a, b) { return a.DisplayName.localeCompare(b.DisplayName); });
+                    });
+                }
+
+                Promise.all([loadReferenceData(), loadLibraries()]).then(function () {
+                    buildEditor();
+                    updateApplyButton();
+                    loadPage();
+                });
+                loadSuggestions();
+            }
+
+            document.querySelectorAll('.bulkMetadataEditorPage').forEach(function (page) {
+                if (page.getAttribute('data-bme-init')) return;
+                page.setAttribute('data-bme-init', '1');
+                init(page);
+            });
+        })();
+    </script>
+</div>
+</body>
+</html>

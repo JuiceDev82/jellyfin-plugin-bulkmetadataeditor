@@ -1,0 +1,12 @@
+[
+  {
+    "guid": "0bdf47d4-d88e-49c6-bd9e-01e8aeb47bd7",
+    "name": "Bulk Metadata Editor",
+    "description": "Edit metadata for many library items at once.",
+    "overview": "Filter movies, shows, episodes, collections, music and more, select any number of them, and update every field from Jellyfin's Edit Metadata dialog in one go.",
+    "owner": "JuiceDev82",
+    "category": "General",
+    "imageUrl": "",
+    "versions": []
+  }
+]

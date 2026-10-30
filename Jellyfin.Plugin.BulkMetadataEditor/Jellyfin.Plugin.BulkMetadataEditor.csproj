@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Jellyfin 12 runs on .NET 10; the server loads this assembly in-process. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Jellyfin.Plugin.BulkMetadataEditor</RootNamespace>
+    <!-- The release workflow reads the published version from AssemblyVersion and
+         the target ABI from the Jellyfin.Controller package version below. -->
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ExcludeAssets="runtime" keeps the Jellyfin assemblies out of the plugin
+         output. The server already has them loaded, and shipping private copies
+         alongside the plugin breaks loading. -->
+    <PackageReference Include="Jellyfin.Common" Version="12.0.0" ExcludeAssets="runtime" />
+    <PackageReference Include="Jellyfin.Controller" Version="12.0.0" ExcludeAssets="runtime" />
+    <PackageReference Include="Jellyfin.Model" Version="12.0.0" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Configuration\bulkEditor.html" />
+    <EmbeddedResource Include="Configuration\bulkEditor.html" />
+    <None Remove="manifest.json" />
+    <None Include="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

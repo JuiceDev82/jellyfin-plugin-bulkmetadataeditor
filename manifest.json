@@ -9,6 +9,14 @@
     "imageUrl": "",
     "versions": [
       {
+        "version": "1.0.2.0",
+        "changelog": "Collections column and collection search New \"In collection\" filter lists the items that belong to any collection whose name contains the given text, with collection names suggested as you type. New optional Collections column shows which collections each item belongs to. Both read membership from the database and refresh within a minute of changes.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/JuiceDev82/jellyfin-plugin-bulkmetadataeditor/releases/download/v1.0.2/Jellyfin.Plugin.BulkMetadataEditor-1.0.2.0.zip",
+        "checksum": "4946615a631d42fde8446822a8b9bb67",
+        "timestamp": "2026-10-30T20:45:32Z"
+      },
+      {
         "version": "1.0.1.0",
         "changelog": "Sorting and description search Column sorting now works while searching by title: title searches use a \"name contains\" filter so the chosen sort is kept instead of Jellyfin's relevance order. New Description filter finds items whose overview contains the given text, and combines with every other filter.",
         "targetAbi": "12.0.0.0",

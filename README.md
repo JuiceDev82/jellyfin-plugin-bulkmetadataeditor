@@ -10,9 +10,14 @@ instead of opening the Edit Metadata dialog for each one.
 
 - **Filter** the library by type: movies, shows, seasons, episodes, collections, albums,
   artists, songs, music videos, videos, trailers, books, audiobooks, playlists and photos.
-  You can also filter by library, title search, genre, tag and year. Other filters find
-  items missing data (overview, parental rating, IMDb/TMDb/TVDb ID) or limit the list by
-  lock state. Results are sortable and paged.
+  You can also filter by library, title search, file name, genre, tag and year. Other
+  filters find items missing data (overview, parental rating, IMDb/TMDb/TVDb ID) or limit
+  the list by lock state. Results are sortable and paged.
+- **File name search** matches part of an item's file name, or its folder name for shows,
+  seasons and albums. It combines with every other filter.
+- **Choose the grid columns.** Pick any of about 40 metadata columns, from release date and
+  studios to external IDs and file path. The default is Type, Year, Rating, Genres, Tags and
+  Locked. Your choice is remembered in the browser.
 - **Select** individual items, a page, or every item that matches the filters. The
   selection is kept as you page through results.
 - **Edit the fields from Jellyfin's Edit Metadata dialog:**
@@ -112,6 +117,7 @@ The web UI uses `ApiClient`, which sends the standard `Authorization: MediaBrows
 | `POST` | `/BulkMetadataEditor/Update` | Apply metadata changes to the given item IDs |
 | `GET` | `/BulkMetadataEditor/AuditLog` | Read the audit log, newest first |
 | `POST` | `/BulkMetadataEditor/AuditLog/Clear` | Clear the audit log |
+| `GET` | `/BulkMetadataEditor/Search` | List the IDs and types of every item whose file or folder name contains `fileName`, with the same filters as `/Items` |
 
 ```json
 {
@@ -140,6 +146,9 @@ single audit log entry. Omitting it records each request as its own entry.
   location keeps the log when the plugin is upgraded.
 - Each entry keeps per-item results for its first 500 items. Its counts always cover every
   item.
+- Jellyfin cannot filter on part of a path. A file name search therefore runs the other
+  filters in the database and matches names in memory on the server. The page caches the
+  matching IDs until a filter changes and loads each page's details from `/Items`.
 
 ## License
 

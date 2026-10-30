@@ -57,6 +57,9 @@
                 .bme .bme-results ul { margin: 0.3em 0; padding-left: 1.3em; }
                 .bme .bme-error { color: #ff6b6b; }
                 .bme .bme-ok { color: #4caf50; }
+                .bme .bme-colgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(12em, 1fr)); gap: 0.3em 1em; margin: 0.6em 0; }
+                .bme .bme-colgrid label { display: inline-flex; align-items: center; gap: 0.35em; font-size: 0.9em; cursor: pointer; }
+                .bme td.bme-wide { min-width: 18em; }
                 .bme .bme-audit-entry { border-top: 1px solid var(--bme-border); padding: 0.5em 0; }
                 .bme .bme-audit-entry:first-child { border-top: 0; }
                 .bme .bme-audit-entry > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 0.2em 1em; align-items: baseline; }
@@ -76,6 +79,7 @@
                 <div class="bme-card">
                     <div class="bme-row">
                         <label>Search<input type="search" class="bme-f-search" placeholder="Title contains…" style="width: 16em"></label>
+                        <label>File name<input type="search" class="bme-f-filename" placeholder="File or folder name contains…" style="width: 16em"></label>
                         <label>Library<select class="bme-f-library"><option value="">All libraries</option></select></label>
                         <label>Genre<input type="text" class="bme-f-genre" style="width: 10em"></label>
                         <label>Tag<input type="text" class="bme-f-tag" style="width: 10em"></label>
@@ -123,6 +127,7 @@
                     <button type="button" class="bme-btn bme-sel-page">Select page</button>
                     <button type="button" class="bme-btn bme-sel-all">Select all matching</button>
                     <button type="button" class="bme-btn bme-sel-clear">Clear selection</button>
+                    <button type="button" class="bme-btn bme-colbtn" aria-expanded="false">Columns ▾</button>
                     <span class="bme-spacer"></span>
                     <span class="bme-pageinfo bme-sub"></span>
                     <select class="bme-pagesize">
@@ -135,18 +140,21 @@
                     <button type="button" class="bme-btn bme-next">Next ›</button>
                 </div>
 
+                <div class="bme-card bme-colpicker" hidden>
+                    <div class="bme-sub">Choose the columns to show. Name is always shown.</div>
+                    <div class="bme-colgrid"></div>
+                    <div class="bme-toolbar">
+                        <button type="button" class="bme-btn bme-col-default">Reset to default</button>
+                        <button type="button" class="bme-btn bme-col-done">Done</button>
+                    </div>
+                </div>
+
                 <div class="bme-tablewrap">
                     <table>
                         <thead>
-                            <tr>
+                            <tr class="bme-headrow">
                                 <th class="bme-cb"><input type="checkbox" class="bme-sel-header" title="Select this page"></th>
                                 <th>Name</th>
-                                <th>Type</th>
-                                <th>Year</th>
-                                <th>Rating</th>
-                                <th>Genres</th>
-                                <th>Tags</th>
-                                <th title="Metadata locked">🔒</th>
                             </tr>
                         </thead>
                         <tbody class="bme-tbody"></tbody>
@@ -212,7 +220,98 @@
             var DISPLAY_ORDERS = ['aired', 'originalAirDate', 'absolute', 'dvd', 'digital', 'storyArc', 'production', 'tv',
                 'alternate', 'regional', 'alternateDvd', 'PremiereDate', 'SortName', 'Default'];
             var UPDATE_BATCH_SIZE = 20;
-            var LIST_FIELDS = 'Genres,Tags,Path,DateCreated,SortName';
+            var COLUMN_STORAGE_KEY = 'bulkMetadataEditor.columns';
+            // Item IDs sent to /Items per request in file name mode; keeps the URL well under server limits.
+            var IDS_PER_REQUEST = 100;
+
+            function joinList(v) { return (v || []).join(', '); }
+            function joinNames(v) { return (v || []).map(function (x) { return x.Name; }).join(', '); }
+            function formatDate(v) {
+                if (!v) return '';
+                var d = new Date(v);
+                return isNaN(d.getTime()) ? v : d.toLocaleDateString();
+            }
+            function truncate(v, n) { return v && v.length > n ? v.slice(0, n) + '…' : (v || ''); }
+            function fileNameOf(path) { return path ? path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() : ''; }
+
+            // Grid columns other than Name. `field` is the /Items Fields value the column needs, if the
+            // server does not return the property by default. `def` marks the default column set.
+            var COLUMNS = [
+                { key: 'Type', label: 'Type', def: true, value: function (i) { return TYPE_LABELS[i.Type] || i.Type; } },
+                { key: 'ProductionYear', label: 'Year', def: true },
+                { key: 'OfficialRating', label: 'Rating', def: true },
+                { key: 'Genres', label: 'Genres', def: true, field: 'Genres', sub: true, value: function (i) { return joinList(i.Genres); } },
+                { key: 'Tags', label: 'Tags', def: true, field: 'Tags', sub: true, value: function (i) { return joinList(i.Tags); } },
+                { key: 'LockData', label: '🔒', title: 'Metadata locked', def: true, field: 'Settings', value: function (i) { return i.LockData ? '🔒' : ''; } },
+                { key: 'OriginalTitle', label: 'Original title', field: 'OriginalTitle' },
+                { key: 'SortName', label: 'Sort title', field: 'SortName' },
+                { key: 'DateCreated', label: 'Date added', field: 'DateCreated', value: function (i) { return formatDate(i.DateCreated); } },
+                { key: 'PremiereDate', label: 'Release date', value: function (i) { return formatDate(i.PremiereDate); } },
+                { key: 'EndDate', label: 'End date', value: function (i) { return formatDate(i.EndDate); } },
+                { key: 'Status', label: 'Status' },
+                { key: 'AirDays', label: 'Air days', value: function (i) { return joinList(i.AirDays); } },
+                { key: 'AirTime', label: 'Air time', field: 'AirTime' },
+                { key: 'RunTimeTicks', label: 'Run time', value: function (i) { return i.RunTimeTicks ? Math.round(i.RunTimeTicks / 600000000) + ' min' : ''; } },
+                { key: 'CommunityRating', label: 'Community rating', value: function (i) { return i.CommunityRating != null ? Math.round(i.CommunityRating * 10) / 10 : ''; } },
+                { key: 'CriticRating', label: 'Critic rating' },
+                { key: 'CustomRating', label: 'Custom rating', field: 'CustomRating' },
+                { key: 'OriginalLanguage', label: 'Original language' },
+                { key: 'Taglines', label: 'Tagline', field: 'Taglines', sub: true, value: function (i) { return (i.Taglines || [])[0] || ''; } },
+                { key: 'Overview', label: 'Overview', field: 'Overview', sub: true, wide: true, value: function (i) { return truncate(i.Overview, 160); } },
+                { key: 'Studios', label: 'Studios', field: 'Studios', sub: true, value: function (i) { return joinNames(i.Studios); } },
+                {
+                    key: 'People', label: 'People', field: 'People', sub: true, wide: true, value: function (i) {
+                        var people = i.People || [];
+                        var shown = people.slice(0, 6).map(function (p) { return p.Name + (p.Type && p.Type !== 'Actor' ? ' (' + p.Type + ')' : ''); });
+                        return shown.join(', ') + (people.length > 6 ? ' +' + (people.length - 6) + ' more' : '');
+                    }
+                },
+                { key: 'ProductionLocations', label: 'Production locations', field: 'ProductionLocations', sub: true, value: function (i) { return joinList(i.ProductionLocations); } },
+                { key: 'Album', label: 'Album' },
+                { key: 'AlbumArtists', label: 'Album artists', value: function (i) { return joinNames(i.AlbumArtists); } },
+                { key: 'Artists', label: 'Artists', value: function (i) { return joinList(i.Artists); } },
+                { key: 'IndexNumber', label: 'Number' },
+                { key: 'ParentIndexNumber', label: 'Parent number' },
+                { key: 'AspectRatio', label: 'Aspect ratio' },
+                { key: 'Video3DFormat', label: '3D format' },
+                {
+                    key: 'ProviderIds', label: 'External IDs', field: 'ProviderIds', sub: true, value: function (i) {
+                        var ids = i.ProviderIds || {};
+                        return Object.keys(ids).map(function (k) { return k + ': ' + ids[k]; }).join(', ');
+                    }
+                },
+                { key: 'PreferredMetadataLanguage', label: 'Metadata language', field: 'Settings' },
+                { key: 'PreferredMetadataCountryCode', label: 'Metadata country', field: 'Settings' },
+                { key: 'DisplayOrder', label: 'Display order' },
+                { key: 'LockedFields', label: 'Locked fields', field: 'Settings', sub: true, value: function (i) { return joinList(i.LockedFields); } },
+                { key: 'FileName', label: 'File name', field: 'Path', sub: true, value: function (i) { return fileNameOf(i.Path); } },
+                { key: 'Path', label: 'Path', field: 'Path', sub: true, wide: true }
+            ];
+            COLUMNS.forEach(function (c) {
+                if (!c.value) c.value = function (i) { var v = i[c.key]; return v == null ? '' : v; };
+            });
+
+            function defaultColumnKeys() {
+                return COLUMNS.filter(function (c) { return c.def; }).map(function (c) { return c.key; });
+            }
+
+            // The column choice is a per-browser convenience; storage can be unavailable, so never depend on it.
+            function loadColumnKeys() {
+                try {
+                    var keys = JSON.parse(localStorage.getItem(COLUMN_STORAGE_KEY) || 'null');
+                    if (Array.isArray(keys)) return keys;
+                } catch (e) { /* fall back to defaults */ }
+                return defaultColumnKeys();
+            }
+
+            function saveColumnKeys(keys) {
+                try {
+                    localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(keys));
+                } catch (e) { /* not persisted; the choice still applies to this visit */ }
+            }
+
+            // /Items returns IDs without dashes; normalize so IDs from any source compare equal.
+            function normId(id) { return String(id).replace(/-/g, '').toLowerCase(); }
 
             function el(tag, attrs, children) {
                 var node = document.createElement(tag);
@@ -294,7 +393,9 @@
                     startIndex: 0,
                     total: 0,
                     items: [],
-                    selected: new Map(), // id -> Type
+                    selected: new Map(), // normalized id -> Type
+                    fileMatch: null, // { key, items } cached file name search result
+                    columnKeys: loadColumnKeys(),
                     requestSeq: 0,
                     externalIdTypes: {},
                     busy: false
@@ -358,14 +459,20 @@
                     return q;
                 }
 
+                function fileNameTerm() {
+                    return $('.bme-f-filename').value.trim();
+                }
+
                 function reload() {
                     state.startIndex = 0;
+                    state.fileMatch = null;
                     loadPage();
                 }
 
                 ['.bme-f-library', '.bme-f-genre', '.bme-f-tag', '.bme-f-year', '.bme-f-missing', '.bme-f-locked', '.bme-f-sort', '.bme-f-order']
                     .forEach(function (sel) { $(sel).addEventListener('change', reload); });
                 $('.bme-f-search').addEventListener('input', debounce(reload, 400));
+                $('.bme-f-filename').addEventListener('input', debounce(reload, 400));
                 $('.bme-f-reset').addEventListener('click', function () {
                     page.querySelectorAll('.bme-card input[type=search], .bme-card input[type=text], .bme-card input[type=number]').forEach(function (i) {
                         if (i.closest('.bme-editor')) return;
@@ -390,55 +497,168 @@
                     return [item.Name, null];
                 }
 
-                function loadPage() {
-                    var seq = ++state.requestSeq;
-                    var limit = parseInt($('.bme-pagesize').value, 10);
+                // ---------- columns ----------
+                function visibleColumns() {
+                    return COLUMNS.filter(function (c) { return state.columnKeys.indexOf(c.key) !== -1; });
+                }
+
+                function listFields() {
+                    var fields = [];
+                    visibleColumns().forEach(function (c) {
+                        if (c.field && fields.indexOf(c.field) === -1) fields.push(c.field);
+                    });
+                    return fields.join(',');
+                }
+
+                function renderHeader() {
+                    var row = $('.bme-headrow');
+                    row.querySelectorAll('.bme-colth').forEach(function (th) { th.remove(); });
+                    visibleColumns().forEach(function (c) {
+                        row.appendChild(el('th', { className: 'bme-colth', text: c.label, title: c.title }));
+                    });
+                }
+
+                function buildColumnPicker() {
+                    var grid = $('.bme-colgrid');
+                    grid.innerHTML = '';
+                    COLUMNS.forEach(function (c) {
+                        grid.appendChild(el('label', {}, [
+                            el('input', {
+                                type: 'checkbox', value: c.key, checked: state.columnKeys.indexOf(c.key) !== -1,
+                                onchange: function () {
+                                    state.columnKeys = Array.prototype.map.call(grid.querySelectorAll('input:checked'), function (i) { return i.value; });
+                                    columnsChanged();
+                                }
+                            }),
+                            c.title || c.label
+                        ]));
+                    });
+                }
+
+                function columnsChanged() {
+                    saveColumnKeys(state.columnKeys);
+                    renderHeader();
+                    // New columns may need fields the current page was loaded without.
+                    loadPage();
+                }
+
+                function toggleColumnPicker(show) {
+                    $('.bme-colpicker').hidden = !show;
+                    $('.bme-colbtn').setAttribute('aria-expanded', show ? 'true' : 'false');
+                }
+
+                $('.bme-colbtn').addEventListener('click', function () { toggleColumnPicker($('.bme-colpicker').hidden); });
+                $('.bme-col-done').addEventListener('click', function () { toggleColumnPicker(false); });
+                $('.bme-col-default').addEventListener('click', function () {
+                    state.columnKeys = defaultColumnKeys();
+                    buildColumnPicker();
+                    columnsChanged();
+                });
+
+                // ---------- loading ----------
+                function columnCount() {
+                    return 2 + visibleColumns().length;
+                }
+
+                function showTableMessage(text, className) {
+                    var tbody = $('.bme-tbody');
+                    tbody.innerHTML = '';
+                    tbody.appendChild(el('tr', {}, [el('td', { colspan: columnCount(), className: 'bme-empty ' + (className || ''), text: text })]));
+                }
+
+                function pageSize() {
+                    return parseInt($('.bme-pagesize').value, 10);
+                }
+
+                function loadItemsPage() {
                     var q = buildQuery();
                     q.StartIndex = state.startIndex;
-                    q.Limit = limit;
-                    q.Fields = LIST_FIELDS;
+                    q.Limit = pageSize();
+                    q.Fields = listFields();
                     q.EnableTotalRecordCount = true;
+                    return getJson('Items', q).then(function (r) {
+                        return { items: r.Items || [], total: r.TotalRecordCount || 0 };
+                    });
+                }
 
-                    $('.bme-tbody').innerHTML = '';
-                    $('.bme-tbody').appendChild(el('tr', {}, [el('td', { colspan: 8, className: 'bme-empty', text: 'Loading…' })]));
+                // Every item whose file name matches, in list order. /Items cannot filter on file names,
+                // so the plugin finds them and the result is cached until the filters change.
+                function fileNameMatches() {
+                    var q = buildQuery();
+                    q.FileName = fileNameTerm();
+                    var key = JSON.stringify(q);
+                    if (state.fileMatch && state.fileMatch.key === key) return Promise.resolve(state.fileMatch.items);
+                    return getJson('BulkMetadataEditor/Search', q).then(function (r) {
+                        state.fileMatch = { key: key, items: r.Items || [] };
+                        return state.fileMatch.items;
+                    });
+                }
 
-                    getJson('Items', q).then(function (result) {
+                function loadFileNamePage() {
+                    return fileNameMatches().then(function (all) {
+                        var slice = all.slice(state.startIndex, state.startIndex + pageSize());
+                        var requests = [];
+                        for (var i = 0; i < slice.length; i += IDS_PER_REQUEST) {
+                            requests.push(getJson('Items', {
+                                userId: userId,
+                                Ids: slice.slice(i, i + IDS_PER_REQUEST).map(function (x) { return x.Id; }).join(','),
+                                Fields: listFields(),
+                                EnableImages: false,
+                                EnableUserData: false
+                            }));
+                        }
+                        return Promise.all(requests).then(function (results) {
+                            var byId = {};
+                            results.forEach(function (r) {
+                                (r.Items || []).forEach(function (item) { byId[normId(item.Id)] = item; });
+                            });
+                            return {
+                                items: slice.map(function (x) { return byId[normId(x.Id)]; }).filter(Boolean),
+                                total: all.length
+                            };
+                        });
+                    });
+                }
+
+                function loadPage() {
+                    var seq = ++state.requestSeq;
+                    showTableMessage('Loading…');
+
+                    (fileNameTerm() ? loadFileNamePage() : loadItemsPage()).then(function (result) {
                         if (seq !== state.requestSeq) return;
-                        state.items = result.Items || [];
-                        state.total = result.TotalRecordCount || 0;
+                        state.items = result.items;
+                        state.total = result.total;
                         renderTable();
                     }, function (err) {
                         if (seq !== state.requestSeq) return;
                         console.error('BulkMetadataEditor: failed to load items', err);
-                        $('.bme-tbody').innerHTML = '';
-                        $('.bme-tbody').appendChild(el('tr', {}, [el('td', { colspan: 8, className: 'bme-empty bme-error', text: 'Failed to load items.' })]));
+                        showTableMessage('Failed to load items.', 'bme-error');
                     });
                 }
 
                 function renderTable() {
                     var tbody = $('.bme-tbody');
+                    var columns = visibleColumns();
                     tbody.innerHTML = '';
                     if (!state.items.length) {
-                        tbody.appendChild(el('tr', {}, [el('td', { colspan: 8, className: 'bme-empty', text: 'No items match these filters.' })]));
+                        showTableMessage('No items match these filters.');
                     }
 
                     state.items.forEach(function (item) {
                         var names = displayName(item);
-                        var isSel = state.selected.has(item.Id);
+                        var isSel = isSelected(item.Id);
                         var cb = el('input', { type: 'checkbox', checked: isSel });
-                        var row = el('tr', { className: isSel ? 'bme-selected' : '' }, [
+                        var cells = [
                             el('td', { className: 'bme-cb' }, [cb]),
                             el('td', {}, [
                                 el('a', { href: '#/details?id=' + item.Id + '&serverId=' + serverId, target: '_blank', text: names[0] || '(untitled)' }),
                                 names[1] ? el('div', { className: 'bme-sub', text: names[1] }) : null
-                            ]),
-                            el('td', { text: TYPE_LABELS[item.Type] || item.Type }),
-                            el('td', { text: item.ProductionYear || '' }),
-                            el('td', { text: item.OfficialRating || '' }),
-                            el('td', { className: 'bme-sub', text: (item.Genres || []).join(', ') }),
-                            el('td', { className: 'bme-sub', text: (item.Tags || []).join(', ') }),
-                            el('td', { text: item.LockData ? '🔒' : '' })
-                        ]);
+                            ])
+                        ].concat(columns.map(function (c) {
+                            var className = [c.sub ? 'bme-sub' : '', c.wide ? 'bme-wide' : ''].join(' ').trim();
+                            return el('td', { className: className, text: String(c.value(item)) });
+                        }));
+                        var row = el('tr', { className: isSel ? 'bme-selected' : '' }, cells);
                         cb.addEventListener('change', function () {
                             setSelected(item.Id, item.Type, cb.checked);
                             row.className = cb.checked ? 'bme-selected' : '';
@@ -447,7 +667,7 @@
                         tbody.appendChild(row);
                     });
 
-                    var limit = parseInt($('.bme-pagesize').value, 10);
+                    var limit = pageSize();
                     var from = state.total ? state.startIndex + 1 : 0;
                     var to = Math.min(state.startIndex + limit, state.total);
                     $('.bme-pageinfo').textContent = from + '–' + to + ' of ' + state.total;
@@ -458,15 +678,19 @@
                 }
 
                 function setSelected(id, type, on) {
-                    if (on) state.selected.set(id, type);
-                    else state.selected.delete(id);
+                    if (on) state.selected.set(normId(id), type);
+                    else state.selected.delete(normId(id));
+                }
+
+                function isSelected(id) {
+                    return state.selected.has(normId(id));
                 }
 
                 function updateSelectionUi() {
                     var n = state.selected.size;
                     $('.bme-selcount').textContent = n + ' selected';
-                    var pageSelected = state.items.length > 0 && state.items.every(function (i) { return state.selected.has(i.Id); });
-                    var someSelected = state.items.some(function (i) { return state.selected.has(i.Id); });
+                    var pageSelected = state.items.length > 0 && state.items.every(function (i) { return isSelected(i.Id); });
+                    var someSelected = state.items.some(function (i) { return isSelected(i.Id); });
                     $('.bme-sel-header').checked = pageSelected;
                     $('.bme-sel-header').indeterminate = !pageSelected && someSelected;
                     updateApplyButton();
@@ -485,12 +709,18 @@
                     renderTable();
                 });
                 $('.bme-sel-all').addEventListener('click', function () {
-                    var q = buildQuery();
-                    q.EnableTotalRecordCount = false;
                     var btn = $('.bme-sel-all');
                     btn.disabled = true;
-                    getJson('Items', q).then(function (result) {
-                        (result.Items || []).forEach(function (i) { setSelected(i.Id, i.Type, true); });
+                    var matching;
+                    if (fileNameTerm()) {
+                        matching = fileNameMatches();
+                    } else {
+                        var q = buildQuery();
+                        q.EnableTotalRecordCount = false;
+                        matching = getJson('Items', q).then(function (r) { return r.Items || []; });
+                    }
+                    matching.then(function (items) {
+                        items.forEach(function (i) { setSelected(i.Id, i.Type, true); });
                         renderTable();
                     }, function (err) {
                         console.error('BulkMetadataEditor: select all failed', err);
@@ -498,11 +728,11 @@
                     }).then(function () { btn.disabled = false; });
                 });
                 $('.bme-prev').addEventListener('click', function () {
-                    state.startIndex = Math.max(0, state.startIndex - parseInt($('.bme-pagesize').value, 10));
+                    state.startIndex = Math.max(0, state.startIndex - pageSize());
                     loadPage();
                 });
                 $('.bme-next').addEventListener('click', function () {
-                    state.startIndex += parseInt($('.bme-pagesize').value, 10);
+                    state.startIndex += pageSize();
                     loadPage();
                 });
                 $('.bme-pagesize').addEventListener('change', reload);
@@ -941,6 +1171,8 @@
                         status.textContent = 'Done.';
                         summarizeResults(allResults, $('.bme-results'));
                         updateApplyButton();
+                        // Edits can change which items match the other filters.
+                        state.fileMatch = null;
                         loadPage();
                         loadSuggestions();
                         loadAuditLog();
@@ -1065,6 +1297,8 @@
                     });
                 }
 
+                buildColumnPicker();
+                renderHeader();
                 Promise.all([loadReferenceData(), loadLibraries()]).then(function () {
                     buildEditor();
                     updateApplyButton();

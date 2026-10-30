@@ -406,6 +406,7 @@
                     items: [],
                     selected: new Map(), // normalized id -> Type
                     fileMatch: null, // { key, items } cached file name search result
+                    refreshToken: 0,
                     columnKeys: loadColumnKeys(),
                     requestSeq: 0,
                     externalIdTypes: {},
@@ -617,7 +618,7 @@
                 }
 
                 function loadItemsPage() {
-                    var q = buildQuery();
+                    var q = withRefreshToken(buildQuery());
                     q.StartIndex = state.startIndex;
                     q.Limit = pageSize();
                     q.Fields = listFields();
@@ -630,7 +631,7 @@
                 // Every item whose file name matches, in list order. /Items cannot filter on file names,
                 // so the plugin finds them and the result is cached until the filters change.
                 function fileNameMatches() {
-                    var q = buildQuery();
+                    var q = withRefreshToken(buildQuery());
                     q.FileName = fileNameTerm();
                     var key = JSON.stringify(q);
                     if (state.fileMatch && state.fileMatch.key === key) return Promise.resolve(state.fileMatch.items);
@@ -645,13 +646,13 @@
                         var slice = all.slice(state.startIndex, state.startIndex + pageSize());
                         var requests = [];
                         for (var i = 0; i < slice.length; i += IDS_PER_REQUEST) {
-                            requests.push(getJson('Items', {
+                            requests.push(getJson('Items', withRefreshToken({
                                 userId: userId,
                                 Ids: slice.slice(i, i + IDS_PER_REQUEST).map(function (x) { return x.Id; }).join(','),
                                 Fields: listFields(),
                                 EnableImages: false,
                                 EnableUserData: false
-                            }));
+                            })));
                         }
                         return Promise.all(requests).then(function (results) {
                             var byId = {};
@@ -666,15 +667,28 @@
                     });
                 }
 
-                function loadPage() {
+                // Ignored by the server; only makes the URL unique after an update.
+                function withRefreshToken(q) {
+                    if (state.refreshToken) q._ = state.refreshToken;
+                    return q;
+                }
+
+                function loadPage(onLoaded) {
                     var seq = ++state.requestSeq;
                     showTableMessage('Loading…');
 
                     (fileNameTerm() ? loadFileNamePage() : loadItemsPage()).then(function (result) {
                         if (seq !== state.requestSeq) return;
+                        // An update can move items out of the filters and leave this page past the end.
+                        if (!result.items.length && result.total > 0 && state.startIndex >= result.total) {
+                            state.startIndex = Math.floor((result.total - 1) / pageSize()) * pageSize();
+                            loadPage(onLoaded);
+                            return;
+                        }
                         state.items = result.items;
                         state.total = result.total;
                         renderTable();
+                        if (onLoaded) onLoaded();
                     }, function (err) {
                         if (seq !== state.requestSeq) return;
                         console.error('BulkMetadataEditor: failed to load items', err);
@@ -1214,16 +1228,29 @@
 
                     chain.then(function () {
                         state.busy = false;
-                        status.textContent = 'Done.';
-                        summarizeResults(allResults, $('.bme-results'));
+                        status.textContent = 'Done. Refreshing the list…';
                         updateApplyButton();
-                        // Edits can change which items match the other filters.
-                        state.fileMatch = null;
-                        loadPage();
-                        loadSuggestions();
-                        loadAuditLog();
+                        // Refresh before anything else, so a problem drawing the summary cannot leave the list stale.
+                        refreshAfterUpdate();
+                        try {
+                            summarizeResults(allResults, $('.bme-results'));
+                        } catch (e) {
+                            console.error('BulkMetadataEditor: failed to show results', e);
+                        }
                     });
                 });
+
+                // Reloads everything an update can change. The current filters, sort, page and selection are
+                // kept, so the edited items show their new values in place.
+                function refreshAfterUpdate() {
+                    // A new token gives the reload a URL no browser or proxy can have cached.
+                    state.refreshToken = Date.now();
+                    // Edits can change which items match the filters.
+                    state.fileMatch = null;
+                    loadPage(function () { $('.bme-status').textContent = 'Done. List refreshed.'; });
+                    loadSuggestions();
+                    loadAuditLog();
+                }
 
                 // ---------- audit log ----------
                 function formatWhen(iso) {

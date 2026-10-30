@@ -18,6 +18,10 @@ instead of opening the Edit Metadata dialog for each one.
 - **Choose the grid columns.** Pick any of about 40 metadata columns, from release date and
   studios to external IDs and file path. The default is Type, Year, Rating, Genres, Tags and
   Locked. Your choice is remembered in the browser.
+- **Click a column header to sort** by it, and click again to reverse the order. Sorting runs
+  on the server across every matching item, not just the visible page. It is available for
+  the columns Jellyfin can sort by: name, year, parental rating, dates, run time, ratings,
+  studio, album, artists, numbering and air time.
 - **Select** individual items, a page, or every item that matches the filters. The
   selection is kept as you page through results.
 - **Edit the fields from Jellyfin's Edit Metadata dialog:**

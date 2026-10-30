@@ -60,6 +60,9 @@
                 .bme .bme-colgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(12em, 1fr)); gap: 0.3em 1em; margin: 0.6em 0; }
                 .bme .bme-colgrid label { display: inline-flex; align-items: center; gap: 0.35em; font-size: 0.9em; cursor: pointer; }
                 .bme td.bme-wide { min-width: 18em; }
+                .bme th[data-sort] { cursor: pointer; user-select: none; }
+                .bme th[data-sort]:hover { text-decoration: underline; }
+                .bme th .bme-arrow { margin-left: 0.3em; color: var(--bme-accent); }
                 .bme .bme-audit-entry { border-top: 1px solid var(--bme-border); padding: 0.5em 0; }
                 .bme .bme-audit-entry:first-child { border-top: 0; }
                 .bme .bme-audit-entry > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 0.2em 1em; align-items: baseline; }
@@ -102,14 +105,7 @@
                             </select>
                         </label>
                         <label>Sort by
-                            <select class="bme-f-sort">
-                                <option value="SortName">Name</option>
-                                <option value="DateCreated">Date added</option>
-                                <option value="PremiereDate">Release date</option>
-                                <option value="ProductionYear">Year</option>
-                                <option value="CommunityRating">Community rating</option>
-                                <option value="OfficialRating">Parental rating</option>
-                            </select>
+                            <select class="bme-f-sort"></select>
                         </label>
                         <label>Order
                             <select class="bme-f-order">
@@ -154,7 +150,7 @@
                         <thead>
                             <tr class="bme-headrow">
                                 <th class="bme-cb"><input type="checkbox" class="bme-sel-header" title="Select this page"></th>
-                                <th>Name</th>
+                                <th data-sort="SortName" title="Sort by name">Name</th>
                             </tr>
                         </thead>
                         <tbody class="bme-tbody"></tbody>
@@ -287,9 +283,24 @@
                 { key: 'FileName', label: 'File name', field: 'Path', sub: true, value: function (i) { return fileNameOf(i.Path); } },
                 { key: 'Path', label: 'Path', field: 'Path', sub: true, wide: true }
             ];
+            // Columns the server can sort by, mapped to their ItemSortBy value. Sorting runs on the server
+            // over every matching item, so other columns cannot be sorted without loading them all.
+            var SORT_BY_COLUMN = {
+                ProductionYear: 'ProductionYear', OfficialRating: 'OfficialRating', SortName: 'SortName',
+                DateCreated: 'DateCreated', PremiereDate: 'PremiereDate', AirTime: 'AirTime', RunTimeTicks: 'Runtime',
+                CommunityRating: 'CommunityRating', CriticRating: 'CriticRating', Studios: 'Studio', Album: 'Album',
+                AlbumArtists: 'AlbumArtist', Artists: 'Artist', IndexNumber: 'IndexNumber', ParentIndexNumber: 'ParentIndexNumber'
+            };
+
             COLUMNS.forEach(function (c) {
                 if (!c.value) c.value = function (i) { var v = i[c.key]; return v == null ? '' : v; };
+                c.sort = SORT_BY_COLUMN[c.key];
             });
+
+            // Sort-by dropdown: Name first, then each sortable column once, in column order.
+            var SORT_OPTIONS = [['SortName', 'Name']].concat(COLUMNS
+                .filter(function (c) { return c.sort && c.sort !== 'SortName'; })
+                .map(function (c) { return [c.sort, c.key === 'OfficialRating' ? 'Parental rating' : c.label]; }));
 
             function defaultColumnKeys() {
                 return COLUMNS.filter(function (c) { return c.def; }).map(function (c) { return c.key; });
@@ -463,11 +474,40 @@
                     return $('.bme-f-filename').value.trim();
                 }
 
+                SORT_OPTIONS.forEach(function (o) {
+                    $('.bme-f-sort').appendChild(el('option', { value: o[0], text: o[1] }));
+                });
+
                 function reload() {
                     state.startIndex = 0;
                     state.fileMatch = null;
+                    updateSortIndicators();
                     loadPage();
                 }
+
+                function updateSortIndicators() {
+                    var sortBy = $('.bme-f-sort').value;
+                    var arrow = $('.bme-f-order').value === 'Descending' ? '▼' : '▲';
+                    page.querySelectorAll('.bme-headrow th[data-sort]').forEach(function (th) {
+                        var old = th.querySelector('.bme-arrow');
+                        if (old) old.remove();
+                        if (th.getAttribute('data-sort') === sortBy) th.appendChild(el('span', { className: 'bme-arrow', text: arrow }));
+                    });
+                }
+
+                // Clicking a header sorts by it; clicking the current sort column again flips the order.
+                $('.bme-headrow').addEventListener('click', function (e) {
+                    var th = e.target.closest('th[data-sort]');
+                    if (!th) return;
+                    var sortBy = th.getAttribute('data-sort');
+                    if ($('.bme-f-sort').value === sortBy) {
+                        $('.bme-f-order').value = $('.bme-f-order').value === 'Ascending' ? 'Descending' : 'Ascending';
+                    } else {
+                        $('.bme-f-sort').value = sortBy;
+                        $('.bme-f-order').value = 'Ascending';
+                    }
+                    reload();
+                });
 
                 ['.bme-f-library', '.bme-f-genre', '.bme-f-tag', '.bme-f-year', '.bme-f-missing', '.bme-f-locked', '.bme-f-sort', '.bme-f-order']
                     .forEach(function (sel) { $(sel).addEventListener('change', reload); });
@@ -514,8 +554,14 @@
                     var row = $('.bme-headrow');
                     row.querySelectorAll('.bme-colth').forEach(function (th) { th.remove(); });
                     visibleColumns().forEach(function (c) {
-                        row.appendChild(el('th', { className: 'bme-colth', text: c.label, title: c.title }));
+                        row.appendChild(el('th', {
+                            className: 'bme-colth',
+                            text: c.label,
+                            'data-sort': c.sort,
+                            title: c.sort ? 'Sort by ' + (c.title || c.label).toLowerCase() : (c.title || c.label) + ' (not sortable)'
+                        }));
                     });
+                    updateSortIndicators();
                 }
 
                 function buildColumnPicker() {

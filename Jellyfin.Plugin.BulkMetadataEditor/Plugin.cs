@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Jellyfin.Plugin.BulkMetadataEditor.Configuration;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
@@ -37,6 +38,12 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// Gets the current plugin instance.
     /// </summary>
     public static Plugin? Instance { get; private set; }
+
+    /// <summary>
+    /// Gets the audit log file path. It sits beside the plugin's settings in plugins/configurations,
+    /// because DataFolderPath is the versioned install folder and would be lost on upgrade.
+    /// </summary>
+    public string AuditLogPath => Path.Combine(ApplicationPaths.PluginConfigurationsPath, "Jellyfin.Plugin.BulkMetadataEditor.audit-log.json");
 
     /// <inheritdoc />
     public IEnumerable<PluginPageInfo> GetPages()

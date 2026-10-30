@@ -35,6 +35,9 @@ instead of opening the Edit Metadata dialog for each one.
   - Changing a show's display order queues a refresh.
 - **Per-type report.** A field that does not apply to an item's type is skipped for that
   item and reported after the update. For example, *Status* only applies to shows.
+- **Audit log** at the bottom of the page. Each entry records one bulk edit: when it ran,
+  who ran it, which fields changed and how, and the result for each item, including
+  failures and skipped fields. The log keeps the 100 most recent edits.
 
 ## Installation
 
@@ -95,10 +98,10 @@ manifest checksum.
 
 ## Permissions
 
-The `/BulkMetadataEditor/*` endpoint is gated behind
+Every `/BulkMetadataEditor/*` endpoint is gated behind
 `[Authorize(Policy = Policies.RequiresElevation)]`, so only Jellyfin administrators can call
-it. Jellyfin does not install a global authorization filter. Removing that attribute would
-expose a library-mutating endpoint to anonymous callers.
+them. Jellyfin does not install a global authorization filter. Removing that attribute would
+expose library-mutating endpoints to anonymous callers.
 
 The web UI uses `ApiClient`, which sends the standard `Authorization: MediaBrowser ...` header.
 
@@ -107,9 +110,12 @@ The web UI uses `ApiClient`, which sends the standard `Authorization: MediaBrows
 | Method | Route | Purpose |
 | --- | --- | --- |
 | `POST` | `/BulkMetadataEditor/Update` | Apply metadata changes to the given item IDs |
+| `GET` | `/BulkMetadataEditor/AuditLog` | Read the audit log, newest first |
+| `POST` | `/BulkMetadataEditor/AuditLog/Clear` | Clear the audit log |
 
 ```json
 {
+  "OperationId": "<guid>",
   "ItemIds": ["<guid>", "..."],
   "LockEditedFields": false,
   "Changes": {
@@ -124,7 +130,16 @@ The web UI uses `ApiClient`, which sends the standard `Authorization: MediaBrows
 
 Only fields present in `Changes` are touched, and a `null` value clears the field. The
 response lists, per item, which fields were applied or skipped, and any error. The web UI
-sends updates in batches of 20 items.
+sends updates in batches of 20 items. Batches that share an `OperationId` are recorded as a
+single audit log entry. Omitting it records each request as its own entry.
+
+## Notes
+
+- The audit log is stored as `plugins/configurations/Jellyfin.Plugin.BulkMetadataEditor.audit-log.json`,
+  beside the plugin's settings. Each installed version gets its own install folder, so this
+  location keeps the log when the plugin is upgraded.
+- Each entry keeps per-item results for its first 500 items. Its counts always cover every
+  item.
 
 ## License
 

@@ -1,3 +1,4 @@
+using System;
 using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,6 +23,7 @@ namespace Jellyfin.Plugin.BulkMetadataEditor.Api;
 public class BulkMetadataController : ControllerBase
 {
     private readonly BulkMetadataUpdater _updater;
+    private readonly BulkMetadataAuditLog _auditLog;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BulkMetadataController"/> class.
@@ -36,7 +38,9 @@ public class BulkMetadataController : ControllerBase
         IFileSystem fileSystem,
         ILogger<BulkMetadataController> logger)
     {
+        var plugin = Plugin.Instance ?? throw new InvalidOperationException("Bulk Metadata Editor plugin is not initialized.");
         _updater = new BulkMetadataUpdater(libraryManager, providerManager, fileSystem, logger);
+        _auditLog = new BulkMetadataAuditLog(plugin.AuditLogPath, logger);
     }
 
     /// <summary>
@@ -57,6 +61,33 @@ public class BulkMetadataController : ControllerBase
             return BadRequest("No items were specified.");
         }
 
-        return await _updater.ApplyAsync(request, cancellationToken).ConfigureAwait(false);
+        var response = await _updater.ApplyAsync(request, cancellationToken).ConfigureAwait(false);
+        _auditLog.Record(request, response, User.Identity?.Name);
+        return response;
+    }
+
+    /// <summary>
+    /// Gets the audit log of bulk edits, newest first.
+    /// </summary>
+    /// <response code="200">Audit log returned.</response>
+    /// <returns>The audit log.</returns>
+    [HttpGet("AuditLog")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<AuditLogResponse> GetAuditLog()
+    {
+        return new AuditLogResponse { Entries = _auditLog.ReadEntries() };
+    }
+
+    /// <summary>
+    /// Clears the audit log.
+    /// </summary>
+    /// <response code="204">Audit log cleared.</response>
+    /// <returns>A <see cref="NoContentResult"/>.</returns>
+    [HttpPost("AuditLog/Clear")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public ActionResult ClearAuditLog()
+    {
+        _auditLog.Clear();
+        return NoContent();
     }
 }

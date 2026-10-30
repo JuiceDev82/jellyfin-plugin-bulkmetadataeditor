@@ -57,6 +57,16 @@
                 .bme .bme-results ul { margin: 0.3em 0; padding-left: 1.3em; }
                 .bme .bme-error { color: #ff6b6b; }
                 .bme .bme-ok { color: #4caf50; }
+                .bme .bme-audit-entry { border-top: 1px solid var(--bme-border); padding: 0.5em 0; }
+                .bme .bme-audit-entry:first-child { border-top: 0; }
+                .bme .bme-audit-entry > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 0.2em 1em; align-items: baseline; }
+                .bme .bme-audit-entry > summary::-webkit-details-marker { display: none; }
+                .bme .bme-audit-entry > summary::before { content: '▸'; opacity: 0.6; }
+                .bme .bme-audit-entry[open] > summary::before { content: '▾'; }
+                .bme .bme-audit-when { font-weight: 600; white-space: nowrap; }
+                .bme .bme-audit-fields { flex-basis: 100%; padding-left: 1em; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                .bme .bme-audit-body { padding: 0.5em 0 0.2em 1em; }
+                .bme .bme-audit-body table { margin-top: 0.4em; }
                 @media (max-width: 700px) { .bme .bme-field { grid-template-columns: 1fr; } }
             </style>
 
@@ -161,6 +171,17 @@
                     <div class="bme-progress" hidden><div></div></div>
                     <div class="bme-results"></div>
                 </div>
+
+                <h2 class="sectionTitle">Audit log</h2>
+                <div class="bme-card">
+                    <div class="bme-toolbar">
+                        <span class="bme-audit-info bme-sub"></span>
+                        <span class="bme-spacer"></span>
+                        <button type="button" class="bme-btn bme-audit-refresh">Refresh</button>
+                        <button type="button" class="bme-btn bme-audit-clear">Clear log</button>
+                    </div>
+                    <div class="bme-audit"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -244,6 +265,15 @@
                     clearTimeout(t);
                     t = setTimeout(fn, ms);
                 };
+            }
+
+            function newOperationId() {
+                // crypto.randomUUID needs a secure context, which a LAN server over plain http is not.
+                if (window.crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                    var r = Math.random() * 16 | 0;
+                    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+                });
             }
 
             function modeSelect() {
@@ -877,6 +907,7 @@
                     }
 
                     var lockEdited = $('.bme-lock-edited').checked;
+                    var operationId = newOperationId();
                     var progress = $('.bme-progress');
                     var bar = progress.firstElementChild;
                     var status = $('.bme-status');
@@ -894,7 +925,7 @@
                     batches.forEach(function (batch, idx) {
                         chain = chain.then(function () {
                             status.textContent = 'Updating ' + Math.min((idx + 1) * UPDATE_BATCH_SIZE, ids.length) + ' of ' + ids.length + '…';
-                            return postJson('BulkMetadataEditor/Update', { ItemIds: batch, Changes: changes, LockEditedFields: lockEdited })
+                            return postJson('BulkMetadataEditor/Update', { OperationId: operationId, ItemIds: batch, Changes: changes, LockEditedFields: lockEdited })
                                 .then(function (response) {
                                     allResults = allResults.concat(response.Results || []);
                                 }, function (err) {
@@ -912,7 +943,88 @@
                         updateApplyButton();
                         loadPage();
                         loadSuggestions();
+                        loadAuditLog();
                     });
+                });
+
+                // ---------- audit log ----------
+                function formatWhen(iso) {
+                    var d = new Date(iso);
+                    return isNaN(d.getTime()) ? iso : d.toLocaleString();
+                }
+
+                function renderAuditEntry(entry) {
+                    var counts = entry.UpdatedCount + ' updated' + (entry.FailedCount ? ', ' + entry.FailedCount + ' failed' : '');
+                    var summary = el('summary', {}, [
+                        el('span', { className: 'bme-audit-when', text: formatWhen(entry.TimestampUtc) }),
+                        el('span', { text: entry.UserName || 'unknown user' }),
+                        el('span', { className: entry.FailedCount ? 'bme-error' : 'bme-ok', text: entry.ItemCount + ' item' + (entry.ItemCount === 1 ? '' : 's') + ' · ' + counts }),
+                        el('span', { className: 'bme-audit-fields', text: (entry.Changes || []).join(' · ') })
+                    ]);
+
+                    var details = el('details', { className: 'bme-audit-entry' }, [summary]);
+                    var bodyBuilt = false;
+                    // Build the item table on first open: entries can hold hundreds of items each.
+                    details.addEventListener('toggle', function () {
+                        if (!details.open || bodyBuilt) return;
+                        bodyBuilt = true;
+                        var body = el('div', { className: 'bme-audit-body' }, [
+                            el('div', { text: 'Changes:' }),
+                            el('ul', {}, (entry.Changes || []).map(function (c) { return el('li', { text: c }); })),
+                            entry.LockEditedFields ? el('div', { className: 'bme-sub', text: 'Edited fields were locked.' }) : null
+                        ]);
+                        var rows = (entry.Items || []).map(function (item) {
+                            var notes = item.Success ? (item.Skipped || []).map(function (s) { return 'skipped ' + s; }).join('; ') : (item.Error || 'failed');
+                            return el('tr', {}, [
+                                el('td', {}, [el('a', { href: '#/details?id=' + item.Id + '&serverId=' + serverId, target: '_blank', text: item.Name || item.Id })]),
+                                el('td', { text: TYPE_LABELS[item.Type] || item.Type || '' }),
+                                el('td', { className: item.Success ? 'bme-ok' : 'bme-error', text: item.Success ? 'Updated' : 'Failed' }),
+                                el('td', { className: 'bme-sub', text: notes })
+                            ]);
+                        });
+                        body.appendChild(el('div', { className: 'bme-tablewrap', style: 'max-height: 40vh' }, [
+                            el('table', {}, [
+                                el('thead', {}, [el('tr', {}, [el('th', { text: 'Item' }), el('th', { text: 'Type' }), el('th', { text: 'Result' }), el('th', { text: 'Notes' })])]),
+                                el('tbody', {}, rows)
+                            ])
+                        ]));
+                        if (entry.OmittedItemCount) {
+                            body.appendChild(el('div', { className: 'bme-sub', text: '…and ' + entry.OmittedItemCount + ' more item(s) not listed individually.' }));
+                        }
+                        details.appendChild(body);
+                    });
+                    return details;
+                }
+
+                function loadAuditLog() {
+                    var box = $('.bme-audit');
+                    getJson('BulkMetadataEditor/AuditLog').then(function (r) {
+                        var entries = r.Entries || [];
+                        box.innerHTML = '';
+                        $('.bme-audit-info').textContent = entries.length
+                            ? entries.length + ' bulk edit' + (entries.length === 1 ? '' : 's') + ' recorded (newest first, last 100 kept)'
+                            : '';
+                        $('.bme-audit-clear').disabled = !entries.length;
+                        if (!entries.length) {
+                            box.appendChild(el('div', { className: 'bme-empty', text: 'No bulk edits recorded yet.' }));
+                            return;
+                        }
+                        entries.forEach(function (entry) { box.appendChild(renderAuditEntry(entry)); });
+                    }, function (err) {
+                        console.error('BulkMetadataEditor: failed to load audit log', err);
+                        box.innerHTML = '';
+                        box.appendChild(el('div', { className: 'bme-empty bme-error', text: 'Failed to load the audit log.' }));
+                    });
+                }
+
+                $('.bme-audit-refresh').addEventListener('click', loadAuditLog);
+                $('.bme-audit-clear').addEventListener('click', function () {
+                    if (!window.confirm('Clear the whole audit log? This cannot be undone.')) return;
+                    ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('BulkMetadataEditor/AuditLog/Clear') })
+                        .then(loadAuditLog, function (err) {
+                            console.error('BulkMetadataEditor: failed to clear audit log', err);
+                            notify('Could not clear the audit log.');
+                        });
                 });
 
                 // ---------- reference data ----------
@@ -959,6 +1071,7 @@
                     loadPage();
                 });
                 loadSuggestions();
+                loadAuditLog();
             }
 
             document.querySelectorAll('.bulkMetadataEditorPage').forEach(function (page) {

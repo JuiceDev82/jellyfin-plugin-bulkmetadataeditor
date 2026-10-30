@@ -54,7 +54,12 @@ public class BulkMetadataUpdater
 
         foreach (var id in request.ItemIds.Distinct())
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            // Stop between items rather than mid-item, so every result returned (and audited)
+            // describes an item that was either fully written or not touched.
+            if (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
 
             var item = _libraryManager.GetItemById(id);
             if (item is null)
@@ -63,13 +68,13 @@ public class BulkMetadataUpdater
                 continue;
             }
 
-            var result = new BulkItemResult { Id = id, Name = item.Name };
+            var result = new BulkItemResult { Id = id, Name = item.Name, Type = item.GetBaseItemKind().ToString() };
             try
             {
-                await ApplyToItemAsync(item, request, result, cancellationToken).ConfigureAwait(false);
+                await ApplyToItemAsync(item, request, result, CancellationToken.None).ConfigureAwait(false);
                 result.Success = true;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex)
             {
                 _logger.LogError(ex, "Bulk metadata update failed for {ItemName} ({ItemId})", item.Name, item.Id);
                 result.Error = ex.Message;

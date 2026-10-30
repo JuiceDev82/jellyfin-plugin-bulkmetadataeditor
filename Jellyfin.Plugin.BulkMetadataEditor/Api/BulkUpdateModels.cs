@@ -195,6 +195,11 @@ public class MetadataChanges
 /// </summary>
 public class BulkUpdateRequest
 {
+    /// <summary>
+    /// Gets or sets an ID shared by every batch of one bulk edit, so the batches form a single audit log entry.
+    /// </summary>
+    public Guid OperationId { get; set; }
+
     public Guid[] ItemIds { get; set; } = [];
 
     public MetadataChanges Changes { get; set; } = new();
@@ -214,6 +219,8 @@ public class BulkItemResult
     public Guid Id { get; set; }
 
     public string? Name { get; set; }
+
+    public string? Type { get; set; }
 
     public bool Success { get; set; }
 

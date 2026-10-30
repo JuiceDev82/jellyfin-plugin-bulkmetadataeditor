@@ -125,6 +125,10 @@ jobs:
       # The manifest lives on the default branch, which is what the repository
       # URL serves; the tag only supplies the build.
       - name: Update the manifest on the default branch
+        # The changelog is free text from the tag message. Passed through the environment it reaches
+        # the script verbatim; expanded inline into the command, a quote in it breaks the shell line.
+        env:
+          CHANGELOG: ${{ steps.notes.outputs.changelog }}
         run: |
           set -euo pipefail
           git fetch origin "${{ github.event.repository.default_branch }}"
@@ -138,7 +142,7 @@ jobs:
             --target-abi "${{ steps.meta.outputs.abi }}" \
             --source-url "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/${{ steps.package.outputs.zip_name }}" \
             --checksum "${{ steps.package.outputs.checksum }}" \
-            --changelog "${{ steps.notes.outputs.changelog }}" \
+            --changelog "$CHANGELOG" \
             --timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
           if git diff --quiet manifest.json; then
